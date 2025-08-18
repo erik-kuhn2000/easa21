@@ -58,6 +58,32 @@
 
 </form>
 
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="fas fa-search btn-icon me-2"></i>Search Part Numbers</h5>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            @Html.AntiForgeryToken()
+            <div class="row g-3 align-items-end">
+                <div class="col">
+                    <label asp-for="SearchTerm" class="form-label">Search</label>
+                    <input asp-for="SearchTerm" class="form-control" placeholder="Search by any column...">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary" name="handler" value="search">
+                        <i class="fas fa-search btn-icon me-2"></i>Search
+                    </button>
+                    <button type="submit" class="btn btn-secondary" name="handler" value="clear">
+                        <i class="fas fa-eraser btn-icon me-2"></i>Clear
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
 @if (Model.ProductNumbers != null && Model.ProductNumbers.Any())
 {
 
@@ -102,82 +128,79 @@
     @if (Model.TotalPages > 1)
     {
         <div class="card-footer">
-            <form method="post">
-                @Html.AntiForgeryToken()
-                <nav aria-label="Product Numbers Pagination">
-                    <ul class="pagination justify-content-center mb-0">
-                        @if (Model.PageNumber > 1)
+            <nav aria-label="Product Numbers Pagination">
+                <ul class="pagination justify-content-center mb-0">
+                    @if (Model.PageNumber > 1)
+                    {
+                        <li class="page-item">
+                            <a class="page-link" asp-page="/ManagePartNumbers" asp-route-PageNumber="@(Model.PageNumber - 1)" asp-route-SearchTerm="@Model.SearchTerm">Previous</a>
+                        </li>
+                    }
+                    else
+                    {
+                        <li class="page-item disabled">
+                            <span class="page-link">Previous</span>
+                        </li>
+                    }
+
+                    @{
+                        int maxPagesToShow = 5;
+                        int startPage = Math.Max(1, Model.PageNumber - (maxPagesToShow / 2));
+                        int endPage = Math.Min(Model.TotalPages, startPage + maxPagesToShow - 1);
+
+                        if (endPage - startPage + 1 < maxPagesToShow)
+                        {
+                            startPage = Math.Max(1, endPage - maxPagesToShow + 1);
+                        }
+
+                        @if (startPage > 1)
                         {
                             <li class="page-item">
-                                <button type="submit" class="page-link" name="PageNumber" value="@(Model.PageNumber - 1)">Previous</button>
+                                <a class="page-link" asp-page="/ManagePartNumbers" asp-route-PageNumber="1" asp-route-SearchTerm="@Model.SearchTerm">1</a>
+                            </li>
+                            @if (startPage > 2)
+                            {
+                                <li class="page-item disabled ellipsis"><span class="page-link">...</span></li>
+                            }
+                        }
+
+                        @for (int i = startPage; i <= endPage; i++)
+                        {
+                            <li class="page-item @(i == Model.PageNumber ? "active" : "")">
+                                <a class="page-link" asp-page="/ManagePartNumbers" asp-route-PageNumber="@i" asp-route-SearchTerm="@Model.SearchTerm">@i</a>
                             </li>
                         }
-                        else
+
+                        @if (endPage < Model.TotalPages)
                         {
-                            <li class="page-item disabled">
-                                <span class="page-link">Previous</span>
-                            </li>
-                        }
-
-                        @{
-                            int maxPagesToShow = 5;
-                            int startPage = Math.Max(1, Model.PageNumber - (maxPagesToShow / 2));
-                            int endPage = Math.Min(Model.TotalPages, startPage + maxPagesToShow - 1);
-
-                            if (endPage - startPage + 1 < maxPagesToShow)
+                            @if (endPage < Model.TotalPages - 1)
                             {
-                                startPage = Math.Max(1, endPage - maxPagesToShow + 1);
+                                <li class="page-item disabled ellipsis"><span class="page-link">...</span></li>
                             }
-
-                            @if (startPage > 1)
-                            {
-                                <li class="page-item">
-                                    <button type="submit" class="page-link" name="PageNumber" value="1">1</button>
-                                </li>
-                                @if (startPage > 2)
-                                {
-                                    <li class="page-item disabled ellipsis"><span class="page-link">...</span></li>
-                                }
-                            }
-
-                            @for (int i = startPage; i <= endPage; i++)
-                            {
-                                <li class="page-item @(i == Model.PageNumber ? "active" : "")">
-                                    <button type="submit" class="page-link" name="PageNumber" value="@i">@i</button>
-                                </li>
-                            }
-
-                            @if (endPage < Model.TotalPages)
-                            {
-                                @if (endPage < Model.TotalPages - 1)
-                                {
-                                    <li class="page-item disabled ellipsis"><span class="page-link">...</span></li>
-                                }
-                                <li class="page-item">
-                                    <button type="submit" class="page-link" name="PageNumber" value="@Model.TotalPages">@Model.TotalPages</button>
-                                </li>
-                            }
-                        }
-
-                        @if (Model.PageNumber < Model.TotalPages)
-                        {
                             <li class="page-item">
-                                <button type="submit" class="page-link" name="PageNumber" value="@(Model.PageNumber + 1)">Next</button>
+                                <a class="page-link" asp-page="/ManagePartNumbers" asp-route-PageNumber="@Model.TotalPages" asp-route-SearchTerm="@Model.SearchTerm">@Model.TotalPages</a>
                             </li>
                         }
-                        else
-                        {
-                            <li class="page-item disabled">
-                                <span class="page-link">Next</span>
-                            </li>
-                        }
-                    </ul>
-                </nav>
+                    }
 
-                <div class="text-center text-muted small mt-2">
-                    Showing page @Model.PageNumber of @Model.TotalPages (@Model.TotalResults total results)
-                </div>
-            </form>
+                    @if (Model.PageNumber < Model.TotalPages)
+                    {
+                        <li class="page-item">
+                            <a class="page-link" asp-page="/ManagePartNumbers" asp-route-PageNumber="@(Model.PageNumber + 1)" asp-route-SearchTerm="@Model.SearchTerm">Next</a>
+                        </li>
+                    }
+                    else
+                    {
+                        <li class="page-item disabled">
+                            <span class="page-link">Next</span>
+                        </li>
+                    }
+                </ul>
+            </nav>
+
+            <div class="text-center text-muted small mt-2">
+                Showing page @Model.PageNumber of @Model.TotalPages (@Model.TotalResults total results)
+            </div>
         </div>
     }
 
@@ -230,7 +253,7 @@ else
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                 <strong>Your about to delete the entry for this part number.</strong><br />
+                <strong>Your about to delete the entry for this part number.</strong><br />
                 This action is not reversable.
             </div>
             <div class="modal-footer">
@@ -360,7 +383,6 @@ else
 
         function showDeleteConfirmation(productNo) {
             currentDeleteProductNo = productNo;
-          
             deleteModal.show();
         }
 
@@ -408,14 +430,14 @@ else
                         <div class="col-md-6">
                             <label class="form-label">Serialization <span class="error-star" style="color: red;">*</span></label>
                             <select id="update_Serialization" class="form-control mandatory">
-                               
+
                                 ${serializationOptions}
                             </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Part Type <span class="error-star" style="color: red;">*</span></label>
                             <select id="update_ProductType" class="form-control mandatory">
-                               
+
                                 ${productTypeOptions}
                             </select>
                         </div>

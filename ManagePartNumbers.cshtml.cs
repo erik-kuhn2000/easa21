@@ -23,8 +23,6 @@ namespace QApp.Pages
             public string Manufacturer { get; set; }
         }
 
-
-
         [BindProperty]
         public ProductNumber NewProduct { get; set; } = new ProductNumber();
 
@@ -32,11 +30,14 @@ namespace QApp.Pages
         public List<SelectListItem> SerializationList { get; set; }
         public List<SelectListItem> ProductTypeList { get; set; }
 
-        [BindProperty]
+        [BindProperty(SupportsGet = true)]
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 25;
         public int TotalResults { get; set; } = 0;
         public int TotalPages => (int)Math.Ceiling((double)TotalResults / PageSize);
+
+        [BindProperty(SupportsGet = true)]
+        public string SearchTerm { get; set; }
 
         public string SuccessMessage { get; set; }
         public string ErrorMessage { get; set; }
@@ -58,11 +59,30 @@ namespace QApp.Pages
             LoadProductNumbers();
         }
 
+
         public IActionResult OnPost(string handler)
         {
+            _logger.LogInformation("OnPost called with handler: {Handler}, SearchTerm before processing: '{SearchTerm}'", handler, SearchTerm);
+
             if (handler == "add")
             {
                 return OnPostAddProduct();
+            }
+
+            if (handler == "search")
+            {
+                PageNumber = 1; // Reset to first page when searching
+                _logger.LogInformation("Search initiated with term: '{SearchTerm}'", SearchTerm);
+            }
+
+            if (handler == "clear")
+            {
+                SearchTerm = string.Empty;
+                PageNumber = 1;
+                _logger.LogInformation("Search cleared - SearchTerm after clear: '{SearchTerm}'", SearchTerm);
+
+                // Redirect to clear the form state completely
+                return RedirectToPage("/ManagePartNumbers");
             }
 
             LoadDropdowns();
@@ -262,23 +282,49 @@ namespace QApp.Pages
                 {
                     connection.Open();
 
-                    // Get total count
-                    var countSql = "SELECT COUNT(*) FROM PartNumbers";
+                    var whereClauses = new List<string>();
+
+                    // Build WHERE clause
+                    if (!string.IsNullOrEmpty(SearchTerm))
+                    {
+                        whereClauses.Add("(ProductNo LIKE @SearchTerm OR ProductDesc LIKE @SearchTerm OR Serialization LIKE @SearchTerm OR ProductType LIKE @SearchTerm OR Manufacturer LIKE @SearchTerm)");
+                    }
+
+                    string whereClause = whereClauses.Any() ? "WHERE " + string.Join(" AND ", whereClauses) : "";
+                    _logger.LogInformation("Search WHERE clause: {whereClause}", whereClause);
+
+                    // Get total count - CREATE SEPARATE PARAMETERS
+                    var countSql = $"SELECT COUNT(*) FROM PartNumbers {whereClause}";
                     using (SqlCommand countCommand = new SqlCommand(countSql, connection))
                     {
+                        if (!string.IsNullOrEmpty(SearchTerm))
+                        {
+                            var searchTermWithWildcards = $"%{SearchTerm}%";
+                            countCommand.Parameters.AddWithValue("@SearchTerm", searchTermWithWildcards);
+                        }
+
                         object countResult = countCommand.ExecuteScalar();
                         TotalResults = countResult != null ? Convert.ToInt32(countResult) : 0;
                     }
 
-                    // Get paginated data
+                    // Get paginated data - CREATE SEPARATE PARAMETERS AGAIN
                     int offset = (PageNumber - 1) * PageSize;
-                    var selectSql = @"SELECT ProductNo, ProductDesc, Serialization, ProductType, Manufacturer 
-                                      FROM PartNumbers 
-                                      ORDER BY ProductNo 
-                                      OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+                    var selectSql = $@"SELECT ProductNo, ProductDesc, Serialization, ProductType, Manufacturer 
+                              FROM PartNumbers 
+                              {whereClause}
+                              ORDER BY ProductNo 
+                              OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+                    _logger.LogInformation("Executing SQL: {selectSql}", selectSql);
 
                     using (SqlCommand selectCommand = new SqlCommand(selectSql, connection))
                     {
+                        // Add search parameter again for select command
+                        if (!string.IsNullOrEmpty(SearchTerm))
+                        {
+                            var searchTermWithWildcards = $"%{SearchTerm}%";
+                            selectCommand.Parameters.AddWithValue("@SearchTerm", searchTermWithWildcards);
+                        }
+
                         selectCommand.Parameters.AddWithValue("@Offset", offset);
                         selectCommand.Parameters.AddWithValue("@PageSize", PageSize);
 
@@ -301,7 +347,7 @@ namespace QApp.Pages
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error loading part numbers");
+                _logger.LogError(ex, "Error loading part numbers with search term: {SearchTerm}", SearchTerm);
                 ErrorMessage = "Error loading part numbers.";
             }
         }
@@ -474,7 +520,7 @@ namespace QApp.Pages
                     var logquery = "INSERT INTO Log_PartNumbers (Action, Performed_By, Datetime, ProductNo, ProductDescription, Serialization, PartType, Manufacturer) VALUES (@Action, @ID, @Time, @ProductNo, @ProductDescription,@Serialization, @PartType, @Manufacturer)";
                     using (SqlCommand cmd = new SqlCommand(logquery, conn))
                     {
-                      
+
                         cmd.Parameters.AddWithValue("@Action", "Add");
                         cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
                         cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
