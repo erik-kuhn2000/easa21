@@ -1,0 +1,130 @@
+﻿@page
+@model DownloadLogsModel
+@{
+    ViewData["Title"] = "Download Logs";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="page-title">@ViewData["Title"]</h1>
+    </div>
+    <p class="subtitle">Download the logs for every function of the application.</p>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-file-alt btn-icon me-2"></i>Available Log Files</h5>
+        </div>
+        <div class="card-body">
+          
+            <ul class="list-group">
+                @* Loop through the LogTables property from the PageModel *@
+                @foreach (var logEntry in Model.LogNameMap)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+
+                        @* Display a user-friendly name by replacing underscores *@
+                        <span>@logEntry.Value</span>
+
+                        @* Each button is its own form that posts the specific table name *@
+                        <form method="post" class="mb-0 download-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="tableName" value="@logEntry.Key" />
+                            <button type="submit" class="btn btn-sm btn-primary">
+                                <i class="fas fa-download btn-icon me-2"></i>Download
+                            </button>
+                        </form>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script>
+        // Your success and error message functions remain the same
+        function showErrorMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+            setTimeout(() => { if (alert.parentNode) { alert.parentNode.removeChild(alert); } }, 8000);
+        }
+
+        function showSuccessMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-check-circle me-2"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+            setTimeout(() => { if (alert.parentNode) { alert.parentNode.removeChild(alert); } }, 8000);
+        }
+
+        async function handleDownload(event) {
+            event.preventDefault();
+
+            const form = event.target;
+            const formData = new FormData(form);
+            const token = formData.get('__RequestVerificationToken');
+
+            showSuccessMessage('Certificate Download started.');
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || `Download failed with status: ${response.status}`);
+                }
+
+                const blob = await response.blob();
+                const contentDisposition = response.headers.get('content-disposition');
+                let filename = "download.xlsx"; // Default filename
+
+                // *** UPDATED FILENAME PARSING LOGIC ***
+                if (contentDisposition) {
+                    // This is the modern format for filenames with special characters
+                    let match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+                    if (match && match[1]) {
+                        filename = decodeURIComponent(match[1]);
+                    } else {
+                        // This is the fallback, non-greedy regex for standard filenames
+                        match = contentDisposition.match(/filename="([^"]+)"/i);
+                        if (match && match[1]) {
+                            filename = match[1];
+                        }
+                    }
+                }
+
+                const link = document.createElement('a');
+                const url = window.URL.createObjectURL(blob);
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+
+            } catch (error) {
+                console.error('Download error:', error);
+                showErrorMessage(error.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const downloadForms = document.querySelectorAll('.download-form');
+            downloadForms.forEach(form => {
+                form.addEventListener('submit', handleDownload);
+            });
+        });
+    </script>
+}

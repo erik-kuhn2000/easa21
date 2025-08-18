@@ -1,0 +1,1396 @@
+﻿@using Microsoft.AspNetCore.Authorization
+@using System.Security.Principal
+@inject IAuthorizationService AuthorizationService
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EASA21 Manual Release Tool</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/QApp.styles.css" asp-append-version="true" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.14.0-beta3/css/bootstrap-select.min.css" rel="stylesheet">
+    <link rel="icon" href="favicon.png" />
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+
+
+    <style>
+
+        /*
+                        ============================================
+
+                       ==      MASTER CSS STYLESHEET (FINAL)     ==
+                        ==      Primary Color: #242A75            ==
+                        ==      Accent Color: #00BBDD
+          ==
+                        ==      Consolidated: All Versions        ==
+                        ============================================
+                      */
+
+        /* --- CSS Variables & General Styles --- */
+        :root {
+            --primary-color: #242A75;
+            --accent-color: #00BBDD;
+            --text-color: #333333;
+            --background-color: #f4f7f6;
+            --light-gray: #e0e0e0;
+            --white: #ffffff;
+            --border-radius: 12px;
+            --box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .05);
+        }
+
+        html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding-top: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            padding: 2rem;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            color: var(--primary-color);
+        }
+
+        h2 {
+            padding-top: 0.125rem 0.5rem
+        }
+
+        a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+
+            a:hover {
+                color: var(--primary-color);
+            }
+
+        /* --- Navbar & Footer (Floating Style) --- */
+        .navbar {
+            position: sticky;
+            top: 1rem;
+            z-index: 1020;
+            margin: 0.5rem 1rem;
+            width: calc(100% - 2rem);
+            background-color: rgba(255, 255, 255, 0.85);
+            backdrop-filter: saturate(180%) blur(10px);
+            -webkit-backdrop-filter: saturate(180%) blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(229, 229, 229, 0.5);
+            height: 64px;
+            padding: 0 1.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+        a.navbar-brand {
+            white-space: normal;
+            text-align: center;
+            word-break: break-all;
+        }
+
+        .nav-pills .nav-link.active,
+        .nav-pills .show > .nav-link {
+            color: #fff;
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+
+        .footer {
+            position: relative;
+            bottom: 0;
+            width: 100%;
+            z-index: 10;
+            height: 64px;
+            padding: 0 1.5rem;
+            display: flex;
+            align-items: center;
+            text-align: left;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: saturate(180%) blur(10px);
+            -webkit-backdrop-filter: saturate(180%) blur(10px);
+            border-radius: 0;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+            border-top: 1px solid rgba(229, 229, 229, 0.5);
+            font-size: 0.9rem;
+            color: var(--text-color);
+        }
+
+
+        /* --- Buttons --- */
+        .btn {
+            height: 44px;
+            padding: 0 24px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: var(--white);
+            box-shadow: 0 4px 15px rgba(36, 42, 117, 0.2);
+        }
+
+            .btn-primary:hover {
+                background-color: var(--accent-color);
+                transform: translateY(-2px);
+                box-shadow: 0 7px 20px rgba(0, 187, 221, 0.4);
+            }
+
+            .btn-primary:active {
+                transform: translateY(0);
+            }
+
+            .btn-primary:disabled,
+            .btn-primary.disabled {
+                background-color: var(--primary-color);
+                box-shadow: none;
+                transform: none;
+                opacity: 0.65;
+                cursor: not-allowed;
+            }
+
+        .btn-secondary {
+            background-color: transparent;
+            border: 1px solid var(--light-gray);
+            color: var(--text-color);
+        }
+
+            .btn-secondary:hover {
+                background-color: #f8f9fa;
+                border-color: #ced4da;
+                color: var(--primary-color);
+            }
+
+
+        /* --- Input Fields & Form Controls --- */
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .input-label,
+        .form-label {
+            display: block;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .input-field,
+        .form-control,
+        .form-select {
+            height: 44px;
+            width: 100%;
+            padding: 0 15px;
+            font-size: 16px;
+            border: 1px solid var(--light-gray);
+            border-radius: var(--border-radius);
+            background-color: var(--white);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            box-sizing: border-box;
+        }
+
+        textarea.input-field,
+        textarea.form-control {
+            height: auto;
+            min-height: 120px;
+            padding: 12px 15px;
+            resize: vertical;
+        }
+
+        .input-field:focus,
+        .form-control:focus,
+        .form-select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 8px rgba(0, 187, 221, 0.3);
+        }
+
+        .form-select {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23242A75' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 16px 12px;
+        }
+
+
+
+            /* ADD THIS RULE: Applies a subtle blue background to mandatory fields */
+            .form-control.mandatory,
+            .input-field.amndatory,
+            .form-select.mandatory {
+                background-color: #f0f8ff;
+                /* AliceBlue, a very light blue */
+            }
+
+
+        /* --- Cards --- */
+        .card {
+            background-color: var(--white);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+            transition: box-shadow 0.3s ease;
+            margin-bottom: 2rem;
+            border: 1px solid #e5e5e5;
+        }
+
+            .card:hover {
+                box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .1);
+            }
+
+        .card-header {
+            padding: 1rem 1.5rem;
+            background-color: #fafbfd;
+            color: var(--primary-color);
+            font-weight: bold;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        .card-footer {
+            padding: 1rem 1.5rem;
+            background-color: #fafafa;
+            border-top: 1px solid #e5e5e5;
+        }
+
+        /* --- Progress Bars --- */
+        .progress-container {
+            background-color: var(--light-gray);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            height: 20px;
+            width: 100%;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, var(--accent-color), var(--primary-color));
+            border-radius: var(--border-radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+            transition: width 1s ease-in-out;
+        }
+
+        /* --- Dropdown Menus --- */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-toggle {
+            height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            background-color: var(--white);
+            color: var(--primary-color);
+            padding: 0 20px;
+            font-size: 16px;
+            border: 1px solid var(--light-gray);
+            border-radius: var(--border-radius);
+            cursor: pointer;
+        }
+
+            .dropdown-toggle::after {
+                content: ' ▼';
+                font-size: 0.8em;
+                margin-left: 5px;
+            }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: var(--white);
+            min-width: 200px;
+            box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.1);
+            border-radius: var(--border-radius);
+            z-index: 1021;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+            .dropdown-content a {
+                color: var(--text-color);
+                padding: 12px 16px;
+                text-decoration: none;
+                display: block;
+                transition: background-color 0.2s ease;
+            }
+
+                .dropdown-content a:hover {
+                    background-color: var(--accent-color);
+                    color: var(--white);
+                }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        /* --- Styled Lists --- */
+        ul.styled-list,
+        ol.styled-list {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .styled-list li {
+            padding: 12px 20px;
+            border-left: 5px solid var(--light-gray);
+            margin-bottom: 10px;
+            background-color: var(--white);
+            border-radius: 0 var(--border-radius) var(--border-radius) 0;
+            transition: border-left-color 0.3s ease, transform 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+            .styled-list li:hover {
+                border-left-color: var(--accent-color);
+                transform: translateX(5px);
+            }
+
+        /*
+                        ============================================
+                        ==      HOME PAGE & MODAL EXTENSIONS      ==
+                        ============================================
+                      */
+
+        /* --- Page Structure
+        & Typography --- */
+        .page-title {
+            margin-top: 0.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: #6c757d;
+            margin-bottom: 2rem;
+        }
+
+        /* --- Hero Action Panels (Add/Search) --- */
+        .btn-add,
+        .btn-primary.btn-update {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            transition: all 0.3s ease;
+            height: auto;
+            min-height: 120px;
+        }
+
+            .btn-add .btn-icon,
+            .btn-primary.btn-update .btn-icon {
+                font-size: 2rem;
+                margin-bottom: 0.75rem;
+                display: block;
+            }
+
+            .btn-add span,
+            .btn-primary.btn-update span {
+                font-size: 1.1rem;
+                font-weight: 600;
+            }
+
+        .btn-add {
+            background-color: var(--white);
+            color: var(--primary-color);
+            border: 1px solid #e5e5e5;
+            box-shadow: var(--box-shadow);
+        }
+
+            .btn-add:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 7px 20px rgba(0, 187, 221, 0.4);
+                background-color: var(--accent-color);
+                color: var(--white);
+            }
+
+        .btn-primary.btn-update {
+            background-color: var(--primary-color);
+            color: var(--white);
+            box-shadow: var(--box-shadow);
+        }
+
+            .btn-primary.btn-update:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 7px 20px rgba(0, 187, 221, 0.4);
+                background-color: var(--accent-color);
+            }
+
+        /* --- Admin Tool Styles --- */
+        .action-btn-slate {
+            background-color: #f8f9fa;
+            color: #495057;
+            border: 1px solid var(--light-gray);
+            font-weight: 600;
+            transition: all 0.2s ease-in-out;
+        }
+
+            .action-btn-slate .btn-icon {
+                margin-right: 0.75rem;
+            }
+
+            .action-btn-slate:hover {
+                background-color: #e9ecef;
+                border-color: var(--accent-color);
+                color: var(--primary-color);
+            }
+
+        /* --- Modal Theming --- */
+        .modal-content {
+            border-radius: var(--border-radius);
+            border: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .modal-header {
+            background-color: #fafbfd;
+            color: var(--primary-color);
+            border-bottom: 1px solid #e5e5e5;
+            padding: 1rem 1.5rem;
+        }
+
+            .modal-header .modal-title {
+                font-size: 1.2rem;
+                font-weight: bold;
+            }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .modal-footer {
+            background-color: #f8f9fa;
+            border-top: 1px solid #e5e5e5;
+            padding: 1rem 1.5rem;
+        }
+
+        #productNumbersList,
+        #amendmentsList,
+        #adminsList,
+        #signatoriesList,
+        #prefixList {
+            background-color: #f8f9fa;
+        }
+
+        /* --- File Upload Modal Styles --- */
+        .drag-drop-area {
+            border: 2px dashed var(--light-gray);
+            border-radius: var(--border-radius);
+            padding: 2.5rem;
+            text-align: center;
+            background-color: #fdfdfd;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+            position: relative;
+        }
+
+            .drag-drop-area.dragover {
+                background-color: #f0f8ff;
+                border-color: var(--accent-color);
+            }
+
+            .drag-drop-area .file-icon {
+                font-size: 3rem;
+                color: var(--accent-color);
+                margin-bottom: 1rem;
+            }
+
+            .drag-drop-area .btn-browse {
+                margin-top: 1rem;
+            }
+
+            .drag-drop-area .file-info {
+                display: none;
+                text-align: left;
+            }
+
+                .drag-drop-area .file-info.show {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    width: 100%;
+                }
+
+                .drag-drop-area .file-info.show {
+                    display: flex;
+                    align-items: center;
+                    width: 100%;
+                    padding: 0.75rem 1.25rem;
+                    background-color: #f8f9fa;
+                    border: 1px solid var(--light-gray);
+                    border-radius: var(--border-radius);
+                    margin-top: 1rem;
+                }
+
+            /* Style for the file name text */
+            .drag-drop-area .file-name {
+                font-weight: 600;
+                color: var(--text-color);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis; /* Ensures long file names don't break the layout */
+                flex-grow: 1;
+                /* Allows the name to take available space */
+            }
+
+            /* Style for the file size text */
+            .drag-drop-area .file-size {
+                font-size: 0.9em;
+                color: #6c757d; /* Muted gray for secondary info */
+                margin-left: 1rem;
+                /* Space between name and size */
+                white-space: nowrap;
+            }
+
+            /* Style for the 'X' button to remove the file */
+            .drag-drop-area .remove-file {
+                background: transparent;
+                border: none;
+                border-radius: 50%;
+                width: 32px;
+                height: 32px;
+                margin-left: 1.5rem;
+                /* Pushes button to the right */
+                padding: 0;
+                cursor: pointer;
+                color: #888;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: background-color 0.2s ease, color 0.2s ease;
+            }
+
+                .drag-drop-area .remove-file:hover {
+                    background-color: #e9ecef;
+                    color: var(--primary-color);
+                }
+
+                .drag-drop-area .remove-file .fas {
+                    font-size: 1.1rem;
+                }
+
+        .upload-progress {
+            display: none;
+            margin-top: 1rem;
+        }
+
+        /*
+                        ============================================
+                        ==    SEARCH PAGE & DATA TABLE STYLES     ==
+                        ============================================
+                      */
+
+        /* --- Data Table Styling ---
+        */
+        .table-responsive {
+            border: 1px solid #e5e5e5;
+            border-radius: var(--border-radius);
+            overflow-x: hidden;
+            overflow-y: hidden;
+            width: 100%;
+            display: block;
+        }
+
+        .table {
+            width: 100% !important;
+            min-width: 100%;
+            margin-bottom: 0;
+            border-color: #e5e5e5;
+            table-layout: fixed;
+        }
+
+            .table td {
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+
+            .table thead th {
+                background-color: var(--primary-color);
+                color: var(--white);
+                font-weight: 600;
+                border-bottom: none;
+                padding: 1rem;
+                white-space: normal;
+            }
+
+                .table thead th[data-sort] {
+                    cursor: pointer;
+                    position: relative;
+                }
+
+                    .table thead th[data-sort]::after {
+                        content: '\f0dc';
+                        font-family: "Font Awesome 5 Free";
+                        font-weight: 900;
+                        opacity: 0.4;
+                        position: absolute;
+                        right: 1rem;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        transition: opacity 0.2s ease;
+                    }
+
+                    .table thead th[data-sort]:hover::after {
+                        opacity: 1;
+                    }
+
+            .table tbody td {
+                padding: 1rem;
+                vertical-align: middle;
+            }
+
+        .table-striped > tbody > tr:nth-of-type(odd) > * {
+            background-color: #fcfdff;
+        }
+
+        .table-hover > tbody > tr:hover > * {
+            background-color: #e6f8fc;
+            color: var(--text-color);
+        }
+
+        /* Table Action Buttons */
+        .table .btn {
+            height: 36px;
+            width: 36px;
+            padding: 0;
+            font-size: 14px;
+            border-radius: 8px;
+        }
+
+            .table .btn .fas {
+                line-height: 36px;
+            }
+
+        .table .d-flex.gap-1 {
+            gap: 0.5rem !important;
+        }
+
+        /* Miscellaneous Search Page Styles */
+        .card-header h5 small {
+            font-size: 0.8rem;
+            font-weight: 400;
+            margin-left: 0.5rem;
+            color: #ffc107;
+            display: inline-block;
+        }
+
+        .navbar .nav-link {
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+            .navbar .nav-link:hover {
+                color: var(--accent-color);
+            }
+
+        .form-control.predefined {
+            background-color: #f8f9fa;
+            color: #6c757d;
+            cursor: default;
+        }
+
+            .form-control.predefined:focus {
+                box-shadow: none;
+                border-color: var(--light-gray);
+            }
+
+        /*
+                        ============================================
+                        ==    CERTIFICATE & DETAIL VIEW STYLES    ==
+                        ============================================
+                      */
+
+        /* Basic grid setup for the two-column layout
+        */
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            margin-right: -15px;
+            margin-left: -15px;
+        }
+
+        .col-md-6 {
+            position: relative;
+            width: 100%;
+            padding-right: 15px;
+            padding-left: 15px;
+        }
+
+
+        .col-md-6 {
+            flex: 0 0 50%;
+            max-width: 50%;
+        }
+
+
+
+        /* Individual detail row styling */
+        .certificate-detail-row {
+            display: flex;
+            align-items: flex-start; /* Aligns items to the top, good for long remarks */
+            padding: 1rem;
+            border-bottom: 1px solid #eef0f2;
+        }
+
+        .col-md-6 > .certificate-detail-row:nth-of-type(even) {
+            background-color: #fcfdff;
+            /* Subtle alternating row color */
+        }
+
+        .col-md-6 > .certificate-detail-row:last-child {
+            border-bottom: none;
+            /* Remove border from the last item in each column */
+        }
+
+        .detail-label {
+            flex: 0 0 35%;
+            /* Label takes up 35% of the width */
+            font-weight: 600;
+            color: var(--primary-color);
+            padding-right: 1rem;
+            box-sizing: border-box;
+        }
+
+        .detail-value {
+            flex: 1;
+            /* Value takes the remaining space */
+            color: var(--text-color);
+            word-break: break-word; /* Prevents long strings from overflowing */
+        }
+
+        /* Special styling for potentially long remarks fields */
+        .remarks-value {
+            font-style: italic;
+            color: #555;
+            white-space: pre-wrap; /* Respects line breaks in the data */
+        }
+
+        /* Responsive stacking for smaller screens */
+
+        .certificate-detail-row {
+            flex-direction: column;
+            /* Stack label and value vertically */
+            align-items: flex-start;
+            padding: 0.75rem;
+        }
+
+        .detail-label {
+            flex-basis: auto;
+            /* Reset flex basis */
+            margin-bottom: 0.25rem;
+            padding-right: 0;
+        }
+
+
+
+        /*
+                        ============================================
+                        ==      PAGINATION STYLES (REFINED)       ==
+                        ============================================
+                      */
+
+
+        .pagination {
+            --pagination-padding-y: 0.5rem;
+            --pagination-padding-x: 1rem;
+            --pagination-font-size: 1rem;
+            --pagination-border-radius: var(--border-radius);
+            --pagination-border-width: 1px;
+            --pagination-border-color: var(--light-gray);
+            --pagination-color: var(--primary-color);
+            --pagination-hover-color: var(--white);
+            --pagination-hover-bg: var(--accent-color);
+            --pagination-hover-border-color: var(--accent-color);
+            --pagination-active-color: var(--white);
+            --pagination-active-bg: var(--primary-color);
+            --pagination-active-border-color: var(--primary-color);
+            --pagination-disabled-color: #6c757d;
+            --pagination-disabled-bg: var(--white);
+            --pagination-disabled-border-color: var(--light-gray);
+            display: flex;
+            padding-left: 0;
+            list-style: none;
+            margin-top: 2rem;
+            gap: 8px;
+            /* MODIFIED: Adds space between each button */
+        }
+
+        .page-link {
+            padding: var(--pagination-padding-y) var(--pagination-padding-x);
+            font-size: var(--pagination-font-size);
+            color: var(--pagination-color);
+            text-decoration: none;
+            background-color: var(--white);
+            border: var(--pagination-border-width) solid var(--pagination-border-color);
+            border-radius: var(--pagination-border-radius);
+            /* MODIFIED: Apply to all buttons */
+            transition: all 0.3s ease;
+            min-width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            font-weight: 500;
+        }
+
+            /* Reset button appearance to inherit page-link styles */
+            .page-link[type="submit"] {
+                background: none;
+                border: none;
+                font-family: inherit;
+                cursor: pointer;
+            }
+
+            .page-link:hover {
+                z-index: 2;
+                color: var(--pagination-hover-color);
+                background-color: var(--pagination-hover-bg);
+                border-color: var(--pagination-hover-border-color);
+            }
+
+        .page-item.active .page-link {
+            z-index: 3;
+            color: var(--pagination-active-color);
+            background-color: var(--pagination-active-bg);
+            border-color: var(--pagination-active-border-color);
+        }
+
+        .page-item.disabled .page-link {
+            color: var(--pagination-disabled-color);
+            pointer-events: none;
+            background-color: var(--pagination-disabled-bg);
+            border-color: var(--pagination-disabled-border-color);
+        }
+
+        /* Style for the ellipsis to make it a clean separator */
+        .page-item.disabled.ellipsis .page-link {
+            background-color: transparent;
+            border-color: transparent;
+        }
+
+        .bottom {
+            margin-top: auto;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .collapse-icon {
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .collapsed .collapse-icon {
+            transform: rotate(-90deg);
+        }
+
+        .card-header[data-bs-toggle="collapse"]:hover {
+            background-color: #f8f9fa !important;
+        }
+
+        .kpi-card .kpi-item {
+            padding: 1.5rem 0.5rem;
+            border-radius: .5rem;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+
+            .kpi-card .kpi-item:hover {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            }
+
+        .kpi-card .kpi-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #0d6efd;
+        }
+
+        .kpi-card .kpi-label {
+            font-size: 1rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
+        }
+
+        .kpi-comparison {
+            margin-top: 0.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 2.25rem; /* Reserve space to prevent layout shifts */
+        }
+
+        .kpi-delta {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        /* Add this CSS to your existing styles */
+        .collapse-icon {
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .card-header[aria-expanded="false"] .collapse-icon {
+            transform: rotate(-90deg);
+        }
+
+        .card-header[aria-expanded="true"] .collapse-icon {
+            transform: rotate(0deg);
+        }
+
+        /* --- Navbar Dropdown --- */
+
+        /* Ensures the dropdown menu is positioned relative to its parent nav item */
+        .navbar .nav-item.dropdown {
+            position: relative;
+        }
+
+        /* The main dropdown menu container */
+        .navbar .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 0.5rem); /* Positions the menu below the nav item with a small gap */
+            left: 0;
+            z-index: 1021; /* Ensures it appears above other content, including the sticky navbar's context */
+            display: none;
+            /* Hidden by default; shown via JavaScript by adding a 'show' class */
+            min-width: 240px;
+            padding: 0.75rem 0;
+            margin: 0;
+            font-size: 1rem;
+            color: var(--text-color);
+            text-align: left;
+            list-style: none;
+            background-color: var(--white);
+            background-clip: padding-box;
+            border: 1px solid rgba(229, 229, 229, 0.75);
+            border-radius: var(--border-radius);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            animation: fadeIn 0.2s ease-in-out; /* Optional: adds a subtle fade-in animation */
+        }
+
+
+
+
+            /* Selector for when the dropdown is toggled open (e.g., by Bootstrap's JS) */
+            .navbar .dropdown-menu.show {
+                display: block;
+            }
+
+        /* Styling for the clickable links within the dropdown */
+        .navbar .dropdown-item {
+            display: block;
+            width: 100%;
+            padding: 0.6rem 1.5rem; /* Vertical and horizontal padding */
+            clear: both;
+            font-weight: 500;
+            color: var(--text-color);
+            text-align: inherit;
+            white-space: nowrap;
+            background-color: transparent;
+            border: 0;
+            text-decoration: none;
+            box-sizing: border-box;
+            /* Ensures padding is included in the element's total width and height */
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+            /* Hover and focus states for dropdown items */
+            .navbar .dropdown-item:hover,
+            .navbar .dropdown-item:focus {
+                color: var(--white);
+                background-color: var(--accent-color);
+            }
+
+        /* Styling for the non-clickable headers */
+        .navbar .dropdown-header {
+            display: block;
+            padding: 0.6rem 1.5rem;
+            margin-bottom: 0;
+            font-size: 0.8rem;
+            color: var(--primary-color);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        /* The horizontal divider line */
+        .navbar .dropdown-divider {
+            height: 0;
+            margin: 0.5rem 0;
+            overflow: hidden;
+            border-top: 1px solid var(--light-gray);
+        }
+
+        /* Adds the caret icon to the dropdown toggle link */
+        .navbar .nav-link.dropdown-toggle::after {
+            content: ' ▼';
+            font-size: 0.7em;
+            vertical-align: middle;
+            margin-left: 5px;
+            display: inline-block;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        /* Rotates the caret when the dropdown is open */
+        .navbar .nav-link.dropdown-toggle[aria-expanded="true"]::after {
+            transform: rotate(180deg);
+        }
+
+        @@media (max-width: 575.98px) {
+            .navbar-collapse
+
+        {
+            margin-top: 0.75rem; /* Adds space below the main navbar */
+            padding: 1rem;
+            background-color: var(--white); /* Use a solid white background */
+            border-radius: var(--border-radius);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(229, 229, 229, 0.5);
+        }
+
+        }
+
+        /* --- Navbar Dropdown Toggle (Admin Tools link) --- */
+
+        /* 1. This new rule removes any border or outline from the toggle link */
+        .navbar .nav-link.dropdown-toggle {
+            border-color: transparent !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
+            /* Ensures it stays borderless even when hovered */
+            .navbar .nav-link.dropdown-toggle:hover {
+                border-color: transparent !important;
+            }
+
+
+            /* 2. This rule replaces the old text arrow with a sleeker SVG chevron */
+            .navbar .nav-link.dropdown-toggle::after {
+                content: '';
+                /* This must be empty to use a background image */
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                margin-left: 0.5rem;
+                vertical-align: -0.15em; /* Fine-tunes vertical alignment */
+                /* Re-using the same consistent chevron from your form inputs */
+                background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23242A75' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+                background-repeat: no-repeat;
+                background-position: center;
+                background-size: contain;
+                border: none; /* Removes any border from the pseudo-element itself */
+                transform: rotate(0deg);
+                transition: transform 0.2s ease-in-out;
+            }
+
+            /* Rotates the new chevron arrow when the dropdown menu is open */
+            .navbar .nav-link.dropdown-toggle[aria-expanded="true"]::after {
+                transform: rotate(180deg);
+            }
+
+        .filter-multi-select {
+            position: relative;
+            width: 100%;
+        }
+
+        #add_Amendment {
+            height: 170px; /* Adjust this value to your desired height */
+        }
+
+        #add_AmendmentSearch {
+            height: 145px; /* Adjust this value to your desired height */
+        }
+
+        #update_Amendment {
+            height: 170px; /* Adjust this value to your desired height */
+        }
+
+        /*
+          ====================================================================
+            DEFINITIVE FIX for Mobile Navbar Alignment, Text, and Background
+          ====================================================================
+        */
+
+        /* --- Style the menu container itself --- */
+        @@media (max-width: 575.98px) {
+            .navbar-collapse
+
+        {
+            margin-top: 0.75rem;
+            padding: 1rem;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(229, 229, 229, 0.5);
+        }
+
+        /* --- Reset the list items (like the <li> for Admin Tools) --- */
+        .navbar-collapse .navbar-nav .nav-item {
+            margin: 0; /* Remove any horizontal margin */
+        }
+
+        /* --- Normalize all links to be perfectly aligned --- */
+        .navbar-collapse .navbar-nav .nav-link {
+            padding: 0.6rem 0; /* ✅ Set ZERO horizontal padding */
+            font-size: 1rem;
+            text-align: left;
+        }
+
+        /* --- Hide the dropdown arrow --- */
+        .navbar-collapse .nav-link.dropdown-toggle::after {
+            display: none;
+        }
+
+        }
+
+
+
+    </style>
+
+</head>
+
+<body>
+
+    @{
+        var isAuthorizedUser = (await AuthorizationService.AuthorizeAsync(User, "SignatoryRoleRequired")).Succeeded;
+        var isAdmin = (await AuthorizationService.AuthorizeAsync(User, "AdminOnly")).Succeeded;
+    }
+    <header>
+        <nav class="navbar navbar-expand-sm navbar-light">
+            <div class="container-fluid px-4">
+                <a class="navbar-brand d-flex align-items-center gap-2" asp-area="" asp-page="/Home">
+                    <img src="~/images/logo.png" alt="Logo" style="height: 40px;" />
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
+                        aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                    <ul class="navbar-nav me-auto mb-2 mb-sm-0">
+
+                        <li class="nav-item">
+                            <a class="nav-link" asp-area="" asp-page="/SearchCertificate">Search</a>
+                        </li>
+
+                        @if (isAuthorizedUser)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-page="/AddCertificate">Add</a>
+                            </li>
+                        }
+
+                        @if (isAdmin)
+                        {
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="adminToolsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Admin Tools
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="adminToolsDropdown">
+                                    <li><h6 class="dropdown-header">Manage Masterdata</h6></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-page="/ManagePartNumbers">Manage Part Numbers</a></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-page="/ManagePrefixes">Manage Prefixes</a></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-page="/ManageAmendments">Manage Amendments</a></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-page="/ManageStatuses">Manage Statuses</a></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-page="/ManageAuthorisationNumber">Manage Authorisation Number</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><h6 class="dropdown-header">Manage Roles</h6></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-page="/ManageUsers">Manage Users</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><h6 class="dropdown-header">Manage Template</h6></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-page="/UploadTemplate">Upload Template</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="downloadTemplate(event)">Download Template</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><h6 class="dropdown-header">Manage Logs</h6></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-page="/DownloadLogs">Download Logs</a></li>
+                                </ul>
+                            </li>
+                        }
+                    </ul>
+
+                    @{
+                        async Task<string> GetUserRoleAsync()
+                        {
+                            if (User?.Identity == null || !User.Identity.IsAuthenticated)
+                                return "Viewer";
+
+                            var adminResult = await AuthorizationService.AuthorizeAsync(User, "AdminOnly");
+                            if (adminResult.Succeeded)
+                                return "Administrator";
+
+                            var userResult = await AuthorizationService.AuthorizeAsync(User, "AuthenticatedUser");
+                            if (userResult.Succeeded)
+                                return "Signatory";
+
+                            return "Viewer";
+                        }
+                        string userRole = await GetUserRoleAsync();
+                    }
+
+                    <ul class="navbar-nav">
+                        @if (User.Identity != null)
+                        {
+                            string displayName = User.Identity.Name;
+                            displayName = displayName.Contains('\\') ? displayName.Split('\\')[1] : displayName;
+                            <li class="nav-item">
+                                <span class="navbar-text">
+                                    <i class="fas fa-user btn-icon me-2"></i>@displayName (@userRole)
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <div class="container">
+        <main role="main" class="pb-3">
+            @RenderBody()
+        </main>
+    </div>
+
+    <div class="bottom">
+
+        &copy; 2025 - Thales
+    </div>
+
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+ 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+
+
+
+
+
+    @* --- START: Added Global Error Handling Script --- *@
+    <script>
+                   // Shows a styled success message pop-up.
+        function showSuccessMessage(message) {
+                    const alert = document.createElement('div');
+        alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                    alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+        alert.innerHTML = `<i class="fas fa-check-circle me-2"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+                    document.body.appendChild(alert);
+                    setTimeout(() => bootstrap.Alert.getOrCreateInstance(alert)?.close(), 5000);
+        }
+
+                // Displays a styled error message pop-up.
+        function showGlobalErrorMessage(message) {
+                    const alert = document.createElement('div');
+        alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+                    alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+        alert.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+                    document.body.appendChild(alert);
+                    setTimeout(() => bootstrap.Alert.getOrCreateInstance(alert)?.close(), 8000);
+        }
+
+                // Handles the template download without leaving the current page.
+        function downloadTemplate(event) {
+                    event.preventDefault();
+                    const link = document.createElement('a');
+        link.href = '@Url.Page("/Home", "DownloadTemplate")';
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.click();
+                    setTimeout(() => {
+                        showSuccessMessage('Template file download started!');
+                    }, 500);
+        document.body.removeChild(link);
+                }
+
+                // Handles the Certificate Log download.
+        function downloadCertificateLog(event) {
+                    event.preventDefault();
+                    const link = document.createElement('a');
+        link.href = '@Url.Page("/Home", "DownloadCertificateLog")';
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.click();
+                    setTimeout(() => {
+                        showSuccessMessage('Certificate Log download started!');
+                    }, 500);
+        document.body.removeChild(link);
+                }
+
+                // Handles the Admin Log download.
+        function downloadAdminLog(event) {
+                    event.preventDefault();
+                    const link = document.createElement('a');
+        link.href = '@Url.Page("/Home", "DownloadTemplateLog")';
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.click();
+                    setTimeout(() => {
+                        showSuccessMessage('Admin Log download started!');
+                    }, 500);
+        document.body.removeChild(link);
+                }
+    </script>
+
+    @{
+        // Checks for the error message from TempData and triggers the script.
+        var errorMessage = TempData["ErrorMessage"] as string;
+        if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    showGlobalErrorMessage('@Html.Raw(errorMessage.Replace("'", "\\'"))');
+                });
+            </script>
+        }
+    }
+    @* --- END: Added Global Error Handling Script --- *@
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

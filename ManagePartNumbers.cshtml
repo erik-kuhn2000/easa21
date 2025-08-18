@@ -1,0 +1,650 @@
+﻿@page
+@model QApp.Pages.ManageProductNumbersModel
+@{
+    ViewData["Title"] = "Manage Part Numbers";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="page-title">Manage Part Numbers</h1>
+</div>
+<p class="subtitle">Add, update, and delete part number entries.</p>
+
+<form method="post">
+    @Html.AntiForgeryToken()
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-plus btn-icon me-2"></i>Add New Part Number</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label asp-for="NewProduct.ProductNo" class="form-label">Part No. <span class="error-star" style="color: red;">*</span></label>
+                    <input asp-for="NewProduct.ProductNo" class="form-control mandatory @(Html.Raw(ModelState.GetFieldValidationState("NewProduct.ProductNo") == Microsoft.AspNetCore.Mvc.ModelBinding.ModelValidationState.Invalid ? "is-invalid" : ""))" placeholder="Enter Part No." maxlength="40">
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="NewProduct.ProductDesc" class="form-label">Description <span class="error-star" style="color: red;">*</span></label>
+                    <input asp-for="NewProduct.ProductDesc" class="form-control mandatory @(Html.Raw(ModelState.GetFieldValidationState("NewProduct.ProductDesc") == Microsoft.AspNetCore.Mvc.ModelBinding.ModelValidationState.Invalid ? "is-invalid" : ""))" placeholder="Enter Description" maxlength="40">
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="NewProduct.Serialization" class="form-label">Serialization <span class="error-star" style="color: red;">*</span></label>
+                    <select asp-for="NewProduct.Serialization" class="form-control mandatory @(Html.Raw(ModelState.GetFieldValidationState("NewProduct.Serialization") == Microsoft.AspNetCore.Mvc.ModelBinding.ModelValidationState.Invalid ? "is-invalid" : ""))" asp-items="Model.SerializationList">
+                        <option value="">-- Select Serialization --</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label asp-for="NewProduct.ProductType" class="form-label">Part Type <span class="error-star" style="color: red;">*</span></label>
+                    <select asp-for="NewProduct.ProductType" class="form-control mandatory @(Html.Raw(ModelState.GetFieldValidationState("NewProduct.ProductType") == Microsoft.AspNetCore.Mvc.ModelBinding.ModelValidationState.Invalid ? "is-invalid" : ""))" asp-items="Model.ProductTypeList">
+                        <option value="">-- Select Part Type --</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="NewProduct.Manufacturer" class="form-label">Manufacturer <span class="error-star" style="color: red;">*</span></label>
+                    <input asp-for="NewProduct.Manufacturer" class="form-control mandatory @(Html.Raw(ModelState.GetFieldValidationState("NewProduct.Manufacturer") == Microsoft.AspNetCore.Mvc.ModelBinding.ModelValidationState.Invalid ? "is-invalid" : ""))" placeholder="Enter Manufacturer" maxlength="40">
+                </div>
+            </div>
+
+            <div class="row mt-3">
+                <div class="col-md-12 text-end">
+                    <button type="submit" class="btn btn-primary" name="handler" value="add">
+                        <i class="fas fa-plus btn-icon me-2"></i>Add
+                    </button>
+                </div>
+            </div>
+            <small class="text-muted"><span class="error-star" style="color: red;">*</span> Field is mandatory</small>
+        </div>
+
+    </div>
+
+</form>
+
+@if (Model.ProductNumbers != null && Model.ProductNumbers.Any())
+{
+
+    <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0" id="productNumbersTable">
+            <thead>
+                <tr>
+                    <th data-sort="string">Part No.</th>
+                    <th data-sort="string">Description</th>
+                    <th data-sort="string">Serialization</th>
+                    <th data-sort="string">Part Type</th>
+                    <th data-sort="string">Manufacturer</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var product in Model.ProductNumbers)
+                {
+                    <tr>
+                        <td>@product.ProductNo</td>
+                        <td>@product.ProductDesc</td>
+                        <td>@product.Serialization</td>
+                        <td>@product.ProductType</td>
+                        <td>@product.Manufacturer</td>
+                        <td class="text-center">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <button type="button" class="btn btn-primary btn-sm update-btn" data-product-no="@product.ProductNo">
+                                    <i class="fas fa-edit" title="Edit Part No."></i>
+                                </button>
+                                <button type="button" class="btn btn-primary btn-sm delete-btn" data-product-no="@product.ProductNo">
+                                    <i class="fas fa-trash" title="Delete Part No."></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+
+    @if (Model.TotalPages > 1)
+    {
+        <div class="card-footer">
+            <form method="post">
+                @Html.AntiForgeryToken()
+                <nav aria-label="Product Numbers Pagination">
+                    <ul class="pagination justify-content-center mb-0">
+                        @if (Model.PageNumber > 1)
+                        {
+                            <li class="page-item">
+                                <button type="submit" class="page-link" name="PageNumber" value="@(Model.PageNumber - 1)">Previous</button>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="page-item disabled">
+                                <span class="page-link">Previous</span>
+                            </li>
+                        }
+
+                        @{
+                            int maxPagesToShow = 5;
+                            int startPage = Math.Max(1, Model.PageNumber - (maxPagesToShow / 2));
+                            int endPage = Math.Min(Model.TotalPages, startPage + maxPagesToShow - 1);
+
+                            if (endPage - startPage + 1 < maxPagesToShow)
+                            {
+                                startPage = Math.Max(1, endPage - maxPagesToShow + 1);
+                            }
+
+                            @if (startPage > 1)
+                            {
+                                <li class="page-item">
+                                    <button type="submit" class="page-link" name="PageNumber" value="1">1</button>
+                                </li>
+                                @if (startPage > 2)
+                                {
+                                    <li class="page-item disabled ellipsis"><span class="page-link">...</span></li>
+                                }
+                            }
+
+                            @for (int i = startPage; i <= endPage; i++)
+                            {
+                                <li class="page-item @(i == Model.PageNumber ? "active" : "")">
+                                    <button type="submit" class="page-link" name="PageNumber" value="@i">@i</button>
+                                </li>
+                            }
+
+                            @if (endPage < Model.TotalPages)
+                            {
+                                @if (endPage < Model.TotalPages - 1)
+                                {
+                                    <li class="page-item disabled ellipsis"><span class="page-link">...</span></li>
+                                }
+                                <li class="page-item">
+                                    <button type="submit" class="page-link" name="PageNumber" value="@Model.TotalPages">@Model.TotalPages</button>
+                                </li>
+                            }
+                        }
+
+                        @if (Model.PageNumber < Model.TotalPages)
+                        {
+                            <li class="page-item">
+                                <button type="submit" class="page-link" name="PageNumber" value="@(Model.PageNumber + 1)">Next</button>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="page-item disabled">
+                                <span class="page-link">Next</span>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+
+                <div class="text-center text-muted small mt-2">
+                    Showing page @Model.PageNumber of @Model.TotalPages (@Model.TotalResults total results)
+                </div>
+            </form>
+        </div>
+    }
+
+}
+else
+{
+    <div class="card">
+        <div class="card-body text-center">
+            <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
+            <h5>No Part No. Found</h5>
+            <p class="text-muted">Start by adding your first part no. using the form above.</p>
+        </div>
+    </div>
+}
+
+<div class="modal fade" id="updateModal" tabindex="-1" aria-labelledby="updateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="updateModalLabel">Update Part No.</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="updateProductForm">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading part details...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-xmark btn-icon me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="confirmUpdateBtn" disabled>
+                    <i class="fas fa-save btn-icon me-2"></i>Update
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                 <strong>Your about to delete the entry for this part number.</strong><br />
+                This action is not reversable.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-xmark btn-icon me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="confirmDeleteBtn">
+                    <i class="fas fa-trash btn-icon me-2"></i>Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const table = document.getElementById('productNumbersTable');
+        if (!table) return;
+
+        // Dropdown lists for update form
+        const serializationList = @Html.Raw(Json.Serialize(Model.SerializationList.Select(s => new { value = s.Value, text = s.Text })));
+        const productTypeList = @Html.Raw(Json.Serialize(Model.ProductTypeList.Select(p => new { value = p.Value, text = p.Text })));
+
+        // Table sorting functionality
+        const headers = table.querySelectorAll('thead th[data-sort]');
+        let currentSort = { column: null, direction: null };
+
+        headers.forEach((header, index) => {
+            header.classList.add('sortable');
+
+            header.addEventListener('click', () => {
+                const sortType = header.getAttribute('data-sort');
+                const isSameColumn = currentSort.column === index;
+
+                const newDirection = isSameColumn ?
+                    (currentSort.direction === 'asc' ? 'desc' : 'asc') :
+                    'asc';
+
+                currentSort = { column: index, direction: newDirection };
+                headers.forEach(h => h.classList.remove('asc', 'desc'));
+                header.classList.add(newDirection);
+
+                sortTable(table, index, sortType, newDirection);
+            });
+        });
+
+        function sortTable(table, columnIndex, sortType, direction) {
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            rows.sort((a, b) => {
+                const aValue = a.cells[columnIndex].textContent.trim();
+                const bValue = b.cells[columnIndex].textContent.trim();
+
+                let comparison = 0;
+
+                switch (sortType) {
+                    case 'number':
+                        comparison = parseFloat(aValue) - parseFloat(bValue);
+                        break;
+                    case 'date':
+                        comparison = new Date(aValue) - new Date(bValue);
+                        break;
+                    default:
+                        comparison = aValue.localeCompare(bValue);
+                        break;
+                }
+
+                return direction === 'asc' ? comparison : -comparison;
+            });
+
+            while (tbody.firstChild) {
+                tbody.removeChild(tbody.firstChild);
+            }
+
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        // Modal instances
+        const updateModal = new bootstrap.Modal(document.getElementById('updateModal'));
+        const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        const updateModalBody = document.getElementById('updateProductForm');
+        const confirmUpdateBtn = document.getElementById('confirmUpdateBtn');
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        let currentUpdateProductNo = null;
+        let currentDeleteProductNo = null;
+
+        // Event listeners for buttons
+        document.addEventListener('click', function (e) {
+            if (e.target.closest('.update-btn')) {
+                const button = e.target.closest('.update-btn');
+                const productNo = button.getAttribute('data-product-no');
+                if (productNo) {
+                    showUpdateProductForm(productNo);
+                }
+            }
+
+            if (e.target.closest('.delete-btn')) {
+                const button = e.target.closest('.delete-btn');
+                const productNo = button.getAttribute('data-product-no');
+                if (productNo) {
+                    showDeleteConfirmation(productNo);
+                }
+            }
+        });
+
+        confirmUpdateBtn.addEventListener('click', function () {
+            if (currentUpdateProductNo) {
+                updateProduct(currentUpdateProductNo);
+            }
+        });
+
+        confirmDeleteBtn.addEventListener('click', function () {
+            if (currentDeleteProductNo) {
+                deleteProduct(currentDeleteProductNo);
+            }
+        });
+
+        function showUpdateProductForm(productNo) {
+            currentUpdateProductNo = productNo;
+            document.getElementById('updateModalLabel').textContent = `Update Part Number: ${productNo}`;
+            updateModalBody.innerHTML = `<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading product details...</p></div>`;
+            confirmUpdateBtn.disabled = true;
+            updateModal.show();
+            fetchProductDetails(productNo, displayUpdateForm);
+        }
+
+        function showDeleteConfirmation(productNo) {
+            currentDeleteProductNo = productNo;
+          
+            deleteModal.show();
+        }
+
+        function fetchProductDetails(productNo, successCallback) {
+            fetch(`?handler=ProductDetails&productNo=${encodeURIComponent(productNo)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    successCallback(data.data);
+                } else {
+                    updateModalBody.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i><strong>Error:</strong> ${data.message || 'Failed to load part details.'}</div>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching product details:', error);
+                updateModalBody.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i><strong>Network Error:</strong> ${error.message}</div>`;
+            });
+        }
+
+        function displayUpdateForm(product) {
+            const serializationOptions = createOptionsWithOriginalValue(serializationList, product.serialization);
+            const productTypeOptions = createOptionsWithOriginalValue(productTypeList, product.productType);
+
+            const formHtml = `
+                <form id="updateForm">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Part No.<span class="error-star" style="color: red;">*</span></label>
+                            <input id="update_ProductNo" class="form-control predefined" value="${product.productNo || ''}" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Description <span class="error-star" style="color: red;">*</span></label>
+                            <input id="update_ProductDesc" class="form-control mandatory" value="${product.productDesc || ''}" placeholder="Enter Description" maxlength="40">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Serialization <span class="error-star" style="color: red;">*</span></label>
+                            <select id="update_Serialization" class="form-control mandatory">
+                               
+                                ${serializationOptions}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Part Type <span class="error-star" style="color: red;">*</span></label>
+                            <select id="update_ProductType" class="form-control mandatory">
+                               
+                                ${productTypeOptions}
+                            </select>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Manufacturer <span class="error-star" style="color: red;">*</span></label>
+                            <input id="update_Manufacturer" class="form-control mandatory" value="${product.manufacturer || ''}" placeholder="Enter Manufacturer" maxlength="40">
+                        </div>
+                    </div>
+                    <small class="text-muted mt-2 d-block"><span class="error-star" style="color: red;">*</span> Field is mandatory</small>
+                </form>
+            `;
+
+            updateModalBody.innerHTML = formHtml;
+            confirmUpdateBtn.disabled = false;
+        }
+
+        function createOptionsWithOriginalValue(optionsList, originalValue) {
+            let options = '';
+            let originalValueFound = false;
+
+            optionsList.forEach(item => {
+                const isSelected = item.value === originalValue;
+                if (isSelected) {
+                    originalValueFound = true;
+                }
+                options += `<option value="${item.value}" ${isSelected ? 'selected' : ''}>${item.text}</option>`;
+            });
+
+            if (!originalValueFound && originalValue && originalValue.trim() !== '') {
+                options = `<option value="${originalValue}" selected>${originalValue} (Original)</option>` + options;
+            }
+
+            return options;
+        }
+
+        function updateProduct(productNo) {
+            const mandatoryFields = [
+                { id: 'update_ProductDesc', name: 'Product Description' },
+                { id: 'update_Serialization', name: 'Serialization' },
+                { id: 'update_ProductType', name: 'Product Type' },
+                { id: 'update_Manufacturer', name: 'Manufacturer' }
+            ];
+
+            let isValid = true;
+            let errorMessages = [];
+
+            mandatoryFields.forEach(field => {
+                const element = document.getElementById(field.id);
+                if (!element || !element.value.trim()) {
+                    isValid = false;
+                    errorMessages.push(`${field.name} is required.`);
+                    if (element) {
+                        element.classList.add('is-invalid');
+                    }
+                } else {
+                    if (element) {
+                        element.classList.remove('is-invalid');
+                    }
+                }
+            });
+
+            if (!isValid) {
+                showErrorMessage('Validation Error:<br>' + errorMessages.join('<br>'));
+                return;
+            }
+
+            const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]');
+            const formData = new FormData();
+            formData.append('productNo', productNo);
+            formData.append('productDesc', document.getElementById('update_ProductDesc').value);
+            formData.append('serialization', document.getElementById('update_Serialization').value);
+            formData.append('productType', document.getElementById('update_ProductType').value);
+            formData.append('manufacturer', document.getElementById('update_Manufacturer').value);
+
+            if (antiForgeryToken) {
+                formData.append('__RequestVerificationToken', antiForgeryToken.value);
+            }
+
+            confirmUpdateBtn.disabled = true;
+            confirmUpdateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+
+            fetch('?handler=UpdateProduct', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            })
+            .then(data => {
+                if (data.success) {
+                    showSuccessMessage('Part No. updated successfully!');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    throw new Error(data.message || 'Update failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error updating product:', error);
+                showErrorMessage(`Update error: ${error.message}`);
+            })
+            .finally(() => {
+                setTimeout(() => {
+                    updateModal.hide();
+                    confirmUpdateBtn.disabled = false;
+                    confirmUpdateBtn.innerHTML = '<i class="fas fa-save btn-icon me-2"></i>Update Product';
+                }, 1000);
+            });
+        }
+
+        function deleteProduct(productNo) {
+            const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]');
+            const formData = new FormData();
+            formData.append('productNo', productNo);
+
+            if (antiForgeryToken) {
+                formData.append('__RequestVerificationToken', antiForgeryToken.value);
+            }
+
+            confirmDeleteBtn.disabled = true;
+            confirmDeleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+
+            fetch('?handler=DeleteProduct', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            })
+            .then(data => {
+                if (data.success) {
+                    showSuccessMessage('Part No. deleted successfully!');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    throw new Error(data.message || 'Delete failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting product:', error);
+                showErrorMessage(`Delete error: ${error.message}`);
+            })
+            .finally(() => {
+                setTimeout(() => {
+                    deleteModal.hide();
+                    confirmDeleteBtn.disabled = false;
+                    confirmDeleteBtn.innerHTML = '<i class="fas fa-trash btn-icon me-2"></i>Delete';
+                }, 1000);
+            });
+        }
+
+        function showSuccessMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-check-circle"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 5000);
+        }
+
+        function showErrorMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999;min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 8000);
+        }
+    });
+</script>
+
+@section Scripts {
+    <script>
+        function showSuccessMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-check-circle"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 5000);
+        }
+
+        function showErrorMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 8000);
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            var successMsg = "@Html.Raw(Model.SuccessMessage ?? "")";
+            if (successMsg && successMsg.trim() !== "") {
+                showSuccessMessage(successMsg);
+            }
+
+            var errorMsg = "@Html.Raw(Model.ErrorMessage ?? "")";
+            if (errorMsg && errorMsg.trim() !== "") {
+                showErrorMessage(errorMsg);
+            }
+        });
+    </script>
+}

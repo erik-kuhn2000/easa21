@@ -1,0 +1,152 @@
+﻿@page
+@model ManageAuthorisationModel
+@{
+    ViewData["Title"] = "Manage Authorisation Number";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="page-title">@ViewData["Title"]</h1>
+        <div>
+        </div>
+    </div>
+    <p class="subtitle">Set the global authorisation number used when generating new certificates.</p>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-6 col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Current Authorisation Number:</label>
+                        <p class="form-control-plaintext fs-4" id="currentAuthorisationNumberDisplay">@Model.CurrentAuthorisationNumber</p>
+                    </div>
+
+                    <hr />
+
+                    <form id="updateAuthForm" method="post" onsubmit="showUpdateConfirmation(event);">
+                        @Html.AntiForgeryToken()
+                        <div class="mb-3">
+                            <label for="newAuthorisationNumberInput" class="form-label fw-bold">Authorisation Number<span class="error-star" style="color: red;">*</span></label>
+                            <input type="text" id="newAuthorisationNumberInput" asp-for="NewAuthorisationNumber" class="form-control mandatory" placeholder="Enter Authorisation Number" maxlenght="40">
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Update
+                            </button>
+                        </div>
+                        <small class="text-muted"><span class="error-star" style="color: red;">*</span> Field is mandatory</small>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="modal fade" id="confirmUpdateModal" tabindex="-1" aria-labelledby="confirmUpdateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmUpdateModalLabel">Confirm Update</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <strong>This will permanently overwrite the existing authorisation number.</strong><br />
+                <span>Once updated, this action cannot be undone.</span>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i>Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmUpdateBtn">
+                    <i class="fas fa-check me-2"></i>Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script>
+        // --- UTILITY FUNCTIONS ---
+        function showSuccessMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-check-circle me-2"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+            setTimeout(() => bootstrap.Alert.getOrCreateInstance(alert)?.close(), 5000);
+        }
+
+        function showErrorMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-exclamation-circle me-2"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+            setTimeout(() => bootstrap.Alert.getOrCreateInstance(alert)?.close(), 8000);
+        }
+
+        // --- PAGE-SPECIFIC LOGIC ---
+                function showUpdateConfirmation(event) {
+            event.preventDefault(); // Stop the form from submitting immediately
+            const input = document.getElementById('newAuthorisationNumberInput');
+
+            // ⭐ FIX: Add/Remove the 'is-invalid' class for visual feedback
+            if (!input.value.trim()) {
+                input.classList.add('is-invalid'); // This adds the red border and icon
+                showErrorMessage('Authorisation number is required.');
+                input.focus();
+                return;
+            } else {
+                input.classList.remove('is-invalid'); // Remove the red border if input is valid
+            }
+
+            const confirmModal = new bootstrap.Modal(document.getElementById('confirmUpdateModal'));
+            confirmModal.show();
+        }
+
+        function executeActualUpdate() {
+            const form = document.getElementById('updateAuthForm');
+            const formData = new FormData(form);
+            const submitButton = document.getElementById('confirmUpdateBtn');
+            const originalButtonText = submitButton.innerHTML;
+
+            submitButton.disabled = true;
+            submitButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...`;
+
+            // The handler points to the current page's OnPost handler
+            fetch('@Url.Page("ManageAuthorisation")', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showSuccessMessage(data.message);
+                        // Update the display on the page without a full reload
+                        document.getElementById('currentAuthorisationNumberDisplay').textContent = data.newNumber;
+                        document.getElementById('newAuthorisationNumberInput').value = '';
+
+                    } else {
+                        showErrorMessage(data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating authorisation number:', error);
+                    showErrorMessage('An error occurred while updating the number.');
+                })
+                .finally(() => {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                    const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirmUpdateModal'));
+                    confirmModal?.hide();
+                });
+        }
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const confirmUpdateBtn = document.getElementById('confirmUpdateBtn');
+            if (confirmUpdateBtn) {
+                confirmUpdateBtn.addEventListener('click', executeActualUpdate);
+            }
+        });
+    </script>
+}

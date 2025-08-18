@@ -1,0 +1,239 @@
+﻿@page
+@model UploadTemplateModel
+@{
+    ViewData["Title"] = "Upload Template";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="page-title">Upload Certificate Template</h1>
+        <div>
+            
+        </div>
+    </div>
+    <p class="subtitle">Upload a new PDF template file. </p>
+
+    <div class="card">
+        <div class="card-body p-4">
+            <form id="uploadForm" method="post" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="drag-drop-area" id="dragDropArea">
+                    <div class="file-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <div class="upload-text">
+                        <h6>Drag & Drop your PDF file here</h6>
+                        <p class="text-muted mb-0">or click to browse</p>
+                        <button type="button" class="btn btn-primary btn-browse mt-3" id="browseBtn">
+                            <i class="fas fa-folder-open me-2"></i>Browse Files
+                        </button>
+                    </div>
+                    <div class="file-info" id="fileInfo">
+                        <div class="file-name" id="fileName"></div>
+                        <div class="file-size" id="fileSize"></div>
+                        <button type="button" class="remove-file" id="removeFile" title="Remove file">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <input type="file" id="fileInput" asp-for="UploadedFile" accept=".pdf" style="display: none;">
+
+                <div class="upload-progress" id="uploadProgress">
+                    <div class="progress mb-2">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar" style="width: 0%" id="progressBar"></div>
+                    </div>
+                    <small class="text-muted" id="progressText">Uploading file...</small>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Only PDF files (.pdf) are accepted. Maximum file size: 10MB.
+                    </small>
+                    <button type="button" class="btn btn-primary" id="uploadBtn" disabled>
+                        <i class="fas fa-upload me-2"></i>Upload
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="confirmUploadModal" tabindex="-1" aria-labelledby="confirmUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmUploadModalLabel">Confirm Upload</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <strong>Your about to update the template file for the certificate. </strong><br />
+                This will overwrite the existing template file. <br />This action cannot be directly undone.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-xmark me-2"></i>Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmUploadBtn">
+                    <i class="fas fa-check me-2"></i>Confirm 
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // --- UTILITY FUNCTIONS ---
+        function showSuccessMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-check-circle me-2"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+            setTimeout(() => bootstrap.Alert.getOrCreateInstance(alert)?.close(), 5000);
+        }
+
+        function showErrorMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-exclamation-circle me-2"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+            setTimeout(() => bootstrap.Alert.getOrCreateInstance(alert)?.close(), 8000);
+        }
+
+        // --- UPLOAD PAGE LOGIC ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const dragDropArea = document.getElementById('dragDropArea');
+            const fileInput = document.getElementById('fileInput');
+            const browseBtn = document.getElementById('browseBtn');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const removeFileBtn = document.getElementById('removeFile');
+            const fileInfo = document.getElementById('fileInfo');
+            const fileNameEl = document.getElementById('fileName');
+            const fileSizeEl = document.getElementById('fileSize');
+            const uploadProgress = document.getElementById('uploadProgress');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const confirmUploadBtn = document.getElementById('confirmUploadBtn');
+
+            let selectedFile = null;
+
+            // Event listeners
+            dragDropArea.addEventListener('dragover', (e) => { e.preventDefault(); dragDropArea.classList.add('drag-over'); });
+            dragDropArea.addEventListener('dragleave', (e) => { e.preventDefault(); dragDropArea.classList.remove('drag-over'); });
+            dragDropArea.addEventListener('drop', (e) => { e.preventDefault(); dragDropArea.classList.remove('drag-over'); if (e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); });
+            browseBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) processFile(e.target.files[0]); });
+            removeFileBtn.addEventListener('click', (e) => { e.stopPropagation(); resetStates(); });
+            uploadBtn.addEventListener('click', showUploadConfirmation);
+            confirmUploadBtn.addEventListener('click', handleUpload);
+
+            function processFile(file) {
+                const allowedExt = ['.pdf',];
+                const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+                const maxSize = 10 * 1024 * 1024; // 10MB
+
+                if (!allowedExt.includes(fileExt)) {
+                    showErrorMessage('Invalid file type. Please select an PDF file.');
+                    resetStates();
+                    return;
+                }
+                if (file.size > maxSize) {
+                    showErrorMessage('File size exceeds 10MB. Please select a smaller file.');
+                    resetStates();
+                    return;
+                }
+
+                selectedFile = file;
+                displayFileInfo(file);
+                uploadBtn.disabled = false;
+            }
+
+            function displayFileInfo(file) {
+                fileNameEl.textContent = file.name;
+                const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
+                const sizeInKB = (file.size / 1024).toFixed(2);
+                fileSizeEl.textContent = file.size > 1024 * 1024 ? `${sizeInMB} MB` : `${sizeInKB} KB`;
+
+                dragDropArea.classList.add('has-file');
+                dragDropArea.querySelector('.file-icon i').className = 'fas fa-file-pdf text-success';
+            }
+
+            function resetStates() {
+                selectedFile = null;
+                fileInput.value = '';
+                dragDropArea.classList.remove('has-file', 'drag-over');
+                dragDropArea.querySelector('.file-icon i').className = 'fas fa-cloud-upload-alt';
+                uploadBtn.disabled = true;
+                hideProgress();
+            }
+
+            function showUploadConfirmation() {
+                if (!selectedFile) return;
+                const confirmModal = new bootstrap.Modal(document.getElementById('confirmUploadModal'));
+                confirmModal.show();
+            }
+
+            async function handleUpload() {
+                if (!selectedFile) return;
+
+                // Hide the confirmation modal
+                const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirmUploadModal'));
+                confirmModal?.hide();
+
+                uploadBtn.disabled = true;
+                showProgress();
+
+                const formData = new FormData();
+                formData.append('UploadedFile', selectedFile);
+                formData.append('__RequestVerificationToken', document.querySelector('input[name="__RequestVerificationToken"]').value);
+
+                try {
+                    const response = await fetch('@Url.Page("UploadTemplate")', { method: 'POST', body: formData });
+                    const result = await response.json();
+
+                    if (result.success) {
+                        updateProgress(100, 'Upload Complete!');
+                        setTimeout(() => {
+                            showSuccessMessage(result.message);
+                            resetStates();
+                        }, 1000);
+                    } else {
+                        throw new Error(result.message || 'Upload failed due to an unknown error.');
+                    }
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    hideProgress();
+                    showErrorMessage(error.message);
+                    uploadBtn.disabled = false; // Re-enable button on failure
+                }
+            }
+
+            function showProgress() {
+                uploadProgress.style.display = 'block';
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += Math.random() * 10;
+                    if (progress > 95) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    updateProgress(progress, 'Uploading...');
+                }, 200);
+            }
+
+            function updateProgress(percent, text) {
+                progressBar.style.width = percent + '%';
+                progressBar.setAttribute('aria-valuenow', percent);
+                progressText.textContent = text;
+            }
+
+            function hideProgress() {
+                uploadProgress.style.display = 'none';
+                updateProgress(0, '');
+            }
+        });
+    </script>
+}

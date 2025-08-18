@@ -1,0 +1,1360 @@
+@page
+
+@model QApp.Pages.SearchModel
+@using Microsoft.AspNetCore.Authorization
+@inject IAuthorizationService AuthorizationService
+@{
+    ViewData["Title"] = "Search Certificates";
+}
+
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="page-title">Search Certificate</h1>
+    <div>
+    </div>
+</div>
+<p class="subtitle">View, update and print certificate entrys.</p>
+
+<form method="post">
+    @Html.AntiForgeryToken()
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+             
+
+                <!-- First row: CertNo, ProductNo, SerialNo, Signatory -->
+                <div class="col-md-3">
+                    <label asp-for="SearchCriteria.CertNo" class="form-label">3. Certificate No.</label>
+                    <input asp-for="SearchCriteria.CertNo" class="form-control" placeholder="All">
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="SearchCriteria.Edition" class="form-label">3. Edition of Form Tracking No.</label>
+                    <input asp-for="SearchCriteria.Edition" class="form-control" maxlength="2" placeholder="All">
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="SearchCriteria.ProductNo" class="form-label">8. Part No.</label>
+                    <select asp-for="SearchCriteria.ProductNo" class="form-control" asp-items="Model.ProductNoList">
+                        <option value="">-- All --</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="SearchCriteria.Quantity" class="form-label">9. Qty.</label>
+                    <input asp-for="SearchCriteria.Quantity" class="form-control" maxlength="4" placeholder="All">
+                </div>
+
+                <!-- First row: CertNo, ProductNo, SerialNo, Signatory -->
+                <div class="col-md-3">
+                    <label asp-for="SearchCriteria.SerialNo" class="form-label">10. Serial No.</label>
+                    <input asp-for="SearchCriteria.SerialNo" class="form-control" placeholder="All">
+            
+
+             
+                    <label asp-for="SearchCriteria.State" class="form-label mt-4">State</label>
+                    <select asp-for="SearchCriteria.State" class="form-control" asp-items="Model.StateList">
+                        <option value="">-- All --</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="SearchCriteria.Amendment" class="form-label">12. Remarks (Amendment)</label>
+                    <select asp-for="SearchCriteria.Amendment" class="form-control" asp-items="Model.AmendmentListNew" id="add_AmendmentSearch" 
+                            multiple>
+                    </select>
+                </div>
+             
+                    
+                <div class="col-md-3">
+                    <label asp-for="SearchCriteria.Signatory" class="form-label">13d. Name of Signatory</label>
+                    <select asp-for="SearchCriteria.Signatory" class="form-control" asp-items="Model.SignatoryList">
+                        <option value="">-- All --</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">13e. Approval Date</label>
+               
+                            <label asp-for="SearchCriteria.StartDate" class="form-label small">From</label>
+                           <input asp-for="SearchCriteria.StartDate" type="date" class="form-control">
+                        
+                            <label asp-for="SearchCriteria.EndDate" class="form-label small">To</label>
+                            <input asp-for="SearchCriteria.EndDate" type="date" class="form-control">
+                      
+                </div>
+
+                
+
+               
+
+                
+
+            <!-- Submit Buttons -->
+             
+                <div class="col-12 text-end mt-4">
+                    <button type="submit" class="btn btn-secondary me-2" name="handler" value="clear"><i class="fas fa-eraser btn-icon me-2"></i>Clear Filters</button>
+                    <button type="submit" class="btn btn-primary" name="handler" value="search"><i class="fas fa-search btn-icon me-2"></i>Search</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    @{
+        var isAdmin = (await AuthorizationService.AuthorizeAsync(User, "AdminOnly")).Succeeded;
+    }
+
+
+    @if (Model.SearchResults != null && Model.SearchResults.Any())
+    {
+
+    
+
+    @if (isAdmin)
+    {
+        <div class="d-flex justify-content-end mb-3">
+            <button type="submit" id="exportBtn"  class="btn btn-primary" asp-page-handler="Export">
+                <i class="fas fa-file-excel btn-icon me-2"></i>Export to Excel
+            </button>
+        </div>
+    }
+
+
+        <!-- Updated table section in your Razor page -->
+        <div class="table-responsive">
+            <table class="table table-striped table-hover" id="certificatesTable">
+                <thead>
+                    <tr>
+                        <th data-sort="string">3. Certificate No.</th>
+                        <th data-sort="string">3. Edition of Form Tracking No.</th>
+                        <th data-sort="string">8. Part No.</th>
+                        <th data-sort="string">9. Qty.</th>
+                        <th data-sort="string">10. Serial No.</th>
+                        <th data-sort="string">12. Remarks (Amendment)</th>
+                        <th data-sort="string">13d. Name of Signatory</th>
+                        <th data-sort="string">13e. Approval Date</th>
+                        <th data-sort="string">State</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var cert in Model.SearchResults)
+                    {
+                        <tr>
+                            <td>@cert.CertNo</td>
+                            <td>@cert.Edition</td>
+                            <td>@cert.ProductNo</td>
+                            <td>@cert.Quantity</td>
+                            <td>@cert.SerialNo</td>
+                            <td>@cert.Amendment</td>
+                            <td>@cert.Signatory</td>
+                            <td>@cert.Date</td>
+                            <td>@cert.State</td>
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <!-- View button - always available -->
+                                    <button type="button" class="btn btn-primary view-btn"
+                                            data-cert-no="@cert.CertNo"
+                                            data-edition="@cert.Edition">
+                                        <i class="fas fa-search" title="View Certificate"></i>
+                                    </button>
+
+                                    @{
+                                        var isAuthorized = await Model.IsUserAuthorizedToUpdate(cert.CertNo);
+                                        
+                                    }
+                                    @if (isAuthorized)
+                                    {
+                                        <!-- Update button - only show for latest edition -->
+                                        @if (cert.IsLatestEdition)
+                                        {
+                                            <button type="button" class="btn btn-primary update-btn"
+                                                    data-cert-no="@cert.CertNo"
+                                                    data-edition="@cert.Edition">
+                                                <i class="fas fa-edit" title="Edit Certificate"></i>
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <!-- Show disabled button for non-latest editions with tooltip -->
+                                            <button type="button" class="btn btn-secondary" disabled
+                                                    title="Only the latest edition can be updated">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        }
+
+                                        <!-- Print button - always available for authorized users -->
+                                        <button type="button" class="btn btn-primary print-btn"
+                                                data-cert-no="@cert.CertNo"
+                                                data-edition="@cert.Edition">
+                                            <i class="fas fa-print" title="Print Certificate"></i>
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+      
+
+        
+
+
+        @if (Model.Searched && Model.SearchResults != null && Model.TotalPages > 1)
+        {
+
+            
+
+            <nav aria-label="Search Results Pagination" class="mt-3">
+                <ul class="pagination justify-content-center">
+                    @if (Model.PageNumber > 1)
+                    {
+                        <li class="page-item">
+                            <button type="submit" class="page-link" name="PageNumber" value="@(Model.PageNumber - 1)">Previous</button>
+                        </li>
+                    }
+                    else
+                    {
+                        <li class="page-item disabled">
+                            <span class="page-link ">Previous</span>
+                        </li>
+                    }
+
+                    @{
+                        int maxPagesToShow = 5;
+                        int startPage = Math.Max(1, Model.PageNumber - (maxPagesToShow / 2));
+                        int endPage = Math.Min(Model.TotalPages, startPage + maxPagesToShow - 1);
+
+                        if (endPage - startPage + 1 < maxPagesToShow)
+                        {
+                            startPage = Math.Max(1, endPage - maxPagesToShow + 1);
+                        }
+
+                        @if (startPage > 1)
+                        {
+                            <li class="page-item">
+                                <button type="submit" class="page-link" name="PageNumber" value="1">1</button>
+                            </li>
+                            @if (startPage > 2)
+                            {
+                                <li class="page-item disabled ellipsis"><span class="page-link">...</span></li>
+                            }
+                        }
+
+                        @for (int i = startPage; i <= endPage; i++)
+                        {
+                            <li class="page-item @(i == Model.PageNumber ? "active" : "")">
+                                <button type="submit" class="page-link" name="PageNumber" value="@i">@i</button>
+                            </li>
+                        }
+
+                        @if (endPage < Model.TotalPages)
+                        {
+                            @if (endPage < Model.TotalPages - 1)
+                            {
+                                <li class="page-item disabled ellipsis"><span class="page-link">...</span></li>
+                            }
+                            <li class="page-item">
+                                <button type="submit" class="page-link" name="PageNumber" value="@Model.TotalPages">@Model.TotalPages</button>
+                            </li>
+                        }
+                    }
+
+                    @if (Model.PageNumber < Model.TotalPages)
+                    {
+                        <li class="page-item">
+                            <button type="submit" class="page-link" name="PageNumber" value="@(Model.PageNumber + 1)">Next</button>
+                        </li>
+                    }
+                    else
+                    {
+                        <li class="page-item disabled">
+                            <span class="page-link">Next</span>
+                        </li>
+                    }
+                </ul>
+            </nav>
+
+            <div class="text-center text-muted small">
+                Showing page @Model.PageNumber of @Model.TotalPages (@Model.TotalResults total results. 25 result per page.)
+            </div>
+
+            <input type="hidden" asp-for="SearchCriteria.CertNo" />
+            <input type="hidden" asp-for="SearchCriteria.ProductNo" />
+            <input type="hidden" asp-for="SearchCriteria.SerialNo" />
+            @foreach (var amendment in Model.SearchCriteria.Amendment ?? new List<string>())
+            {
+                <input type="hidden" name="SearchCriteria.Amendment" value="@amendment" />
+            }
+            <input type="hidden" asp-for="SearchCriteria.Signatory" />
+            <input type="hidden" asp-for="SearchCriteria.StartDate" />
+            <input type="hidden" asp-for="SearchCriteria.EndDate" />
+            <input type="hidden" asp-for="SearchCriteria.Edition" />
+            <input type="hidden" asp-for="SearchCriteria.Quantity" />
+            <input type="hidden" asp-for="SearchCriteria.State" />
+            <input type="hidden" name="handler" value="search" />
+        }
+    }
+    else if (Model.Searched)
+    {
+    }
+
+
+
+</form>
+
+
+
+
+<div class="modal fade" id="certificateModal" tabindex="-1" aria-labelledby="certificateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="certificateModalLabel">Certificate Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="certificateDetails">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading certificate details...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="updateModal" tabindex="-1" aria-labelledby="updateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="updateModalLabel">Update Certificate</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="updateCertificateForm">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading certificate details...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-xmark btn-icon me-2"></i>Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmUpdateBtn" disabled>
+                    <i class="fas fa-save btn-icon me-2"></i>
+                    Update 
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="printModalLabel">Print Certificate</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="printCertificateDetails">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading certificate details...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-xmark btn-icon me-2"></i>Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmPrintFromModal" disabled>
+                    <i class="fas fa-print btn-icon me-2"></i>
+                    Print 
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="confirmUpdateModal" tabindex="-1" aria-labelledby="confirmUpdateModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmUpdateModalLabel">Confirm Update</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <strong>You're about to create a new edition of this certificate.</strong><br />
+                A new certificate entry will be created with an incremented edition number.<br />
+                The original edition of the certificate will remain unchanged in the database.<br />
+                The approval date of the new editon of the certificate will be set to today.<br />
+                If you're not already the signatory, the new editon of the certificate will be automatically assigned to your name.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-xmark btn-icon me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="finalConfirmBtn">
+                    <i class="fas fa-check btn-icon me-2"></i>
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+
+         const currentUserSignatoryName = @Html.Raw(Json.Serialize(Model.CurrentUserSignatoryName));
+
+         const exportBtn = document.getElementById('exportBtn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', function () {
+                // Display a success message and let the form submission proceed to download the file.
+                showSuccessMessage('Export started. Your download will begin shortly.');
+            });
+        }
+        const table = document.getElementById('certificatesTable');
+        if (!table) return;
+
+          var feedbackMessage = "@Html.Raw(Model.SearchErrorMessage)";
+            if (feedbackMessage && feedbackMessage.trim() !== "") {
+                showErrorMessage(feedbackMessage);
+            }
+
+        const productNoListNew = @Html.Raw(Json.Serialize(Model.ProductNoListNew.Select(p => new { value = p.Value, text = p.Text })));
+        const amendmentListNew = @Html.Raw(Json.Serialize(Model.AmendmentListNew.Select(a => new { value = a.Value, text = a.Text })));
+        const signatoryListNew = @Html.Raw(Json.Serialize(Model.SignatoryListNew.Select(s => new { value = s.Value, text = s.Text })));
+        const stateList = @Html.Raw(Json.Serialize(Model.StateListNew.Select(s => new { value = s.Value, text = s.Text })));
+         const approvedList = @Html.Raw(Json.Serialize(Model.ApprovedListNew.Select(s => new { value = s.Value, text = s.Text })));
+         const statusList = @Html.Raw(Json.Serialize(Model.StatusListNew.Select(s => new { value = s.Value, text = s.Text })));
+
+
+           function attachAmendmentLogic(selectId) {
+            const amendmentSelect = document.getElementById(selectId);
+
+            if (amendmentSelect) {
+                // This variable will hold the list of selected indexes before a change occurs.
+                let previousSelection = [];
+
+                // We use 'mousedown' to capture the state *before* the 'change' event fires.
+                amendmentSelect.addEventListener('mousedown', function () {
+                    previousSelection = Array.from(this.selectedOptions).map(opt => opt.index);
+                });
+
+                // The 'change' event fires *after* the user has made their selection.
+                amendmentSelect.addEventListener('change', function () {
+                    const currentSelection = Array.from(this.selectedOptions).map(opt => opt.index);
+
+                    // Find which items, if any, were newly added to the selection.
+                    const addedItems = currentSelection.filter(index => !previousSelection.includes(index));
+
+                    // If no new items were added, it was a DESELECTION.
+                    // We do nothing and let the user's deselection stand.
+                    if (addedItems.length === 0) {
+                        return;
+                    }
+
+                    // An item was SELECTED. Find the highest index among the newly added items.
+                    const maxNewIndex = Math.max(...addedItems);
+
+                    // If the user selected the first item (index 0),
+                    // we also do nothing further, respecting it as a single selection.
+                    if (maxNewIndex === 0) {
+                        return;
+                    }
+
+                    // Apply the cascading logic: select all items from the second option (index 1)
+                    // up to the highest newly selected item.
+                    for (let i = 1; i <= maxNewIndex; i++) {
+                        this.options[i].selected = true;
+                    }
+                });
+            }
+        }
+
+
+
+
+            const formatLocalDate = (dateString) => {
+                if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+                    return '';
+                }
+                const parts = dateString.split('-');
+                const date = new Date(parts[0], parts[1] - 1, parts[2]);
+                return date.toLocaleDateString();
+            };
+
+            document.querySelectorAll('#certificatesTable .locale-date').forEach(cell => {
+                cell.textContent = formatLocalDate(cell.textContent.trim());
+            });
+        const headers = table.querySelectorAll('thead th[data-sort]');
+        let currentSort = { column: null, direction: null };
+
+        headers.forEach((header, index) => {
+            header.classList.add('sortable');
+
+            header.addEventListener('click', () => {
+                const sortType = header.getAttribute('data-sort');
+                const isSameColumn = currentSort.column === index;
+
+                const newDirection = isSameColumn ?
+                    (currentSort.direction === 'asc' ? 'desc' : 'asc') :
+                    'asc';
+
+                currentSort = { column: index, direction: newDirection };
+                headers.forEach(h => h.classList.remove('asc', 'desc'));
+                header.classList.add(newDirection);
+
+                sortTable(table, index, sortType, newDirection);
+            });
+        });
+
+        function sortTable(table, columnIndex, sortType, direction) {
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            rows.sort((a, b) => {
+                const aValue = a.cells[columnIndex].textContent.trim();
+                const bValue = b.cells[columnIndex].textContent.trim();
+
+                let comparison = 0;
+
+                switch (sortType) {
+                    case 'number':
+                        comparison = parseFloat(aValue) - parseFloat(bValue);
+                        break;
+                    case 'date':
+                        comparison = new Date(aValue) - new Date(bValue);
+                        break;
+                    default:
+                        comparison = aValue.localeCompare(bValue);
+                        break;
+                }
+
+                return direction === 'asc' ? comparison : -comparison;
+            });
+            while (tbody.firstChild) {
+                tbody.removeChild(tbody.firstChild);
+            }
+
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        const viewModal = new bootstrap.Modal(document.getElementById('certificateModal'));
+        const viewModalTitle = document.getElementById('certificateModalLabel');
+        const viewModalBody = document.getElementById('certificateDetails');
+
+        const updateModal = new bootstrap.Modal(document.getElementById('updateModal'));
+        const updateModalTitle = document.getElementById('updateModalLabel');
+        const updateModalBody = document.getElementById('updateCertificateForm');
+        const confirmUpdateBtn = document.getElementById('confirmUpdateBtn');
+        let currentUpdateCertNo = null;
+
+        const printModal = new bootstrap.Modal(document.getElementById('printModal'));
+        const printModalTitle = document.getElementById('printModalLabel');
+        const printModalBody = document.getElementById('printCertificateDetails');
+        const confirmPrintBtn = document.getElementById('confirmPrintFromModal');
+        let currentPrintCertNo = null;
+
+        const confirmUpdateModalEl = document.getElementById('confirmUpdateModal');
+        const confirmUpdateModal = new bootstrap.Modal(confirmUpdateModalEl);
+        let validatedUpdateData = null;
+
+         document.getElementById('finalConfirmBtn').addEventListener('click', function () {
+        confirmUpdateModal.hide();
+        if (validatedUpdateData) {
+            submitUpdateData(); // No longer needs increment parameter
+        }
+    });
+
+        // This listener handles the case where the user cancels the confirmation modal
+        // (by clicking cancel, the 'x', or pressing ESC)
+        confirmUpdateModalEl.addEventListener('hidden.bs.modal', function (event) {
+            // If data exists, it means no action was taken, so re-show the edit form.
+            if (validatedUpdateData) {
+                updateModal.show();
+            }
+        });
+
+
+
+            document.addEventListener('click', function (e) {
+        if (e.target.closest('.view-btn')) {
+            const button = e.target.closest('.view-btn');
+            const certNo = button.getAttribute('data-cert-no');
+            const edition = button.getAttribute('data-edition');
+
+            if (certNo) {
+                showCertificateDetails(certNo, edition);
+            }
+        }
+        if (e.target.closest('.update-btn')) {
+            const button = e.target.closest('.update-btn');
+            const certNo = button.getAttribute('data-cert-no');
+            const edition = button.getAttribute('data-edition');
+
+            if (certNo) {
+                showUpdateCertificateForm(certNo, edition);
+            }
+        }
+        if (e.target.closest('.print-btn')) {
+            const button = e.target.closest('.print-btn');
+            const certNo = button.getAttribute('data-cert-no');
+            const edition = button.getAttribute('data-edition');
+            if (certNo) {
+                showPrintCertificateDetails(certNo, edition);
+            }
+        }
+    });
+
+        confirmUpdateBtn.addEventListener('click', function () {
+            if (currentUpdateCertNo) {
+                updateCertificate(currentUpdateCertNo);
+            }
+        });
+
+
+            confirmPrintBtn.addEventListener('click', function () {
+        if (currentPrintCertNo) {
+            printCertificate(currentPrintCertNo, currentPrintEdition);
+        }
+    });
+
+            function showCertificateDetails(certNo, edition) {
+        viewModalTitle.textContent = `Certificate Details: ${certNo} (Edition ${edition})`;
+        viewModalBody.innerHTML = `<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading certificate details...</p></div>`;
+        viewModal.show();
+        fetchCertificateDetails(certNo, edition, displayCertificateDetails, viewModalBody);
+    }
+
+    function showUpdateCertificateForm(certNo, edition) {
+        currentUpdateCertNo = certNo;
+        currentUpdateEdition = edition; // Store edition for later use
+        updateModalTitle.textContent = `Update Certificate: ${certNo} (Edition ${edition})`;
+        updateModalBody.innerHTML = `<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading certificate details...</p></div>`;
+        confirmUpdateBtn.disabled = true;
+        updateModal.show();
+        fetchCertificateDetails(certNo, edition, displayUpdateForm, updateModalBody);
+    }
+
+    function showPrintCertificateDetails(certNo, edition) {
+        currentPrintCertNo = certNo;
+        currentPrintEdition = edition; // Store edition for later use
+        printModalTitle.textContent = `Print Certificate: ${certNo} (Edition ${edition})`;
+        printModalBody.innerHTML = `<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading certificate details...</p></div>`;
+        confirmPrintBtn.disabled = true;
+        printModal.show();
+        fetchCertificateDetails(certNo, edition, displayPrintCertificateDetails, printModalBody);
+    }
+
+            function fetchCertificateDetails(certNo, edition, successCallback, errorContainer) {
+        const url = edition ?
+            `?handler=CertificateDetails&certNo=${encodeURIComponent(certNo)}&edition=${encodeURIComponent(edition)}` :
+            `?handler=CertificateDetails&certNo=${encodeURIComponent(certNo)}`;
+
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Response data:', data);
+            if (data.success) {
+                successCallback(data.data);
+            } else {
+                errorContainer.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i><strong>Error:</strong> ${data.message || 'Failed to load certificate details.'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching certificate details:', error);
+            errorContainer.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i><strong>Network Error:</strong> ${error.message}<br><small>Check browser console for more details.</small></div>`;
+        });
+    }
+
+        function displayCertificateDetails(details) {
+            const detailsHtml = createDetailsHTML(details);
+            viewModalBody.innerHTML = detailsHtml;
+        }
+
+        function displayUpdateForm(details) {
+            const formHtml = createUpdateFormHTML(details);
+            updateModalBody.innerHTML = formHtml;
+            confirmUpdateBtn.disabled = false;
+             attachAmendmentLogic('update_Amendment');
+
+            
+
+        }
+
+        function displayPrintCertificateDetails(details) {
+            const detailsHtml = createDetailsHTML(details);
+            printModalBody.innerHTML = `<div class="alert alert-info mb-3"><i class="fas fa-info-circle me-2"></i><strong>Print Certificate:</strong> Review the certificate details below and click "Print" to generate and download the certificate file. The printing action will set the State of the certificate to "Printed" if its not already set to "Canceled".</div>${detailsHtml}`;
+            confirmPrintBtn.disabled = false;
+        }
+
+        function createDetailsHTML(details) {
+              const formatDisplayDate = (dateString) => {
+      // Return '-' if the date string is null, undefined, or empty.
+      if (!dateString) return '-';
+
+      // Create a Date object. Passing an ISO 8601 string ('YYYY-MM-DD')
+      // is more reliable than parsing it manually.
+      const date = new Date(dateString);
+
+      // Check if the created date is invalid (e.g., from '2025-99-11').
+      if (isNaN(date.getTime())) {
+        return '-';
+      }
+
+      const options = {
+        day: '2-digit',   // e.g., '11'
+        month: 'short',   // e.g., 'Aug'
+        year: 'numeric'   // e.g., '2025'
+      };
+
+      // Use Intl.DateTimeFormat for consistent, specified formatting.
+      // The 'en-GB' locale helps ensure the day-month-year order.
+      return new Intl.DateTimeFormat('en-GB', options).format(date);
+    };
+
+            return `
+                <style>
+                    .remarks-value {
+                        word-wrap: break-word;
+                        white-space: pre-wrap;
+                        overflow-wrap: break-word;
+                    }
+                    .description-value {
+                        word-wrap: break-word;
+                        white-space: pre-wrap;
+                        overflow-wrap: break-word;
+                        background-color: #f8f9fa;
+                        padding: 5px;
+                        border-radius: 4px;
+                        min-height: 40px;
+                    }
+                </style>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="certificate-detail-row"><div class="detail-label">3. Form Tracking No.:</div><div class="detail-value">${details.certNo +"-2-"+ details.edition || '-'}</div></div>
+                        <div class="certificate-detail-row"><div class="detail-label">6. Item:</div><div class="detail-value">${details.item || '-'}</div></div>
+                        <div class="certificate-detail-row"><div class="detail-label">8. Part No.:</div><div class="detail-value">${details.productNo || '-'}</div></div>
+                        <div class="certificate-detail-row"><div class="detail-label">10. Serial No.:</div><div class="detail-value">${details.serialNo || '-'}</div></div>
+                         <div class="certificate-detail-row"><div class="detail-label">12. Remarks (Line 1):</div><div class="detail-value remarks-value">${details.remarks1 || '-'}</div></div>
+                        <div class="certificate-detail-row"><div class="detail-label">12. Remarks (Line 3):</div><div class="detail-value remarks-value">${details.remarks3 || '-'}</div></div>
+                          <div class="certificate-detail-row"><div class="detail-label">12. Remarks (Amendment):</div><div class="detail-value">${details.amendment || '-'}</div></div>
+                           <div class="certificate-detail-row"><div class="detail-label">13c. Approval/Authorisation No.:</div><div class="detail-value">${details.authorisation || '-'}</div></div>
+                           <div class="certificate-detail-row"><div class="detail-label">13e. Approval Date:</div><div class="detail-value">${formatDisplayDate(details.date)}</div></div>
+                    </div>
+                    <div class="col-md-6">
+                         <div class="certificate-detail-row"><div class="detail-label">5. Work Order/Contract/Invoice:</div><div class="detail-value">${details.serialization === 'No' ? details.productNo : details.productNo + '-' + details.serialNo}</div></div>
+                         <div class="certificate-detail-row"><div class="detail-label">7. Description:</div><div class="detail-value">${details.productDescription || '-'}</div></div>
+                          <div class="certificate-detail-row"><div class="detail-label">9. Qty.:</div><div class="detail-value">${details.quantity || '-'}</div></div>
+                          <div class="certificate-detail-row"><div class="detail-label">10. Status/Work:</div><div class="detail-value">${details.status || '-'}</div></div>
+                                 <div class="certificate-detail-row"><div class="detail-label">12. Remarks (Line 2):</div><div class="detail-value remarks-value">${details.remarks2 || '-'}</div></div>
+                        <div class="certificate-detail-row"><div class="detail-label">12. Remarks (Line 4):</div><div class="detail-value remarks-value">${details.remarks4 || '-'}</div></div>
+                        <div class="certificate-detail-row"><div class="detail-label">13a. Approved Design Indicator:</div><div class="detail-value">${details.approved || '-'}</div></div>
+                        <div class="certificate-detail-row"><div class="detail-label">13d. Name of Signatory:</div><div class="detail-value">${details.signatory || '-'}</div></div>
+
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="certificate-detail-row"><div class="detail-label">State:</div><div class="detail-value">${details.state || '-'}</div></div>
+                        
+                    </div>
+                    <div class="col-md-6">
+                         <div class="certificate-detail-row"><div class="detail-label">Comment:</div><div class="detail-value">${details.comment || '-'}</div></div>
+                         
+                    </div>
+                </div>
+
+              
+            `;
+        }
+
+        function createUpdateFormHTML(details) {
+
+            const today = new Date();
+    const formattedToday = today.toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric'
+    });
+ 
+
+    
+    let newSignatoryName = details.signatory; // Default to original
+    let signatoryNote = ''; // Default to no note
+    if (currentUserSignatoryName && details.signatory !== currentUserSignatoryName) {
+        newSignatoryName = currentUserSignatoryName; // The new signatory will be the current user
+        signatoryNote = `New signatory will be you (<strong>${currentUserSignatoryName}</strong>).`;
+    }
+
+              const currentEdition = parseInt(details.edition) || 0;
+    const nextEdition = (currentEdition + 1).toString().padStart(2, '0');
+
+            const productOptions = createOptionsWithOriginalValue(productNoListNew, details.productNo);
+            const amendmentOptions = createMultiSelectOptions(amendmentListNew, details.amendment);
+            
+            const stateOptions = createOptionsWithOriginalValue(stateList, details.state);
+            const approvedOptions = createOptionsWithOriginalValue(approvedList, details.approved);
+             const statusOptions = createOptionsWithOriginalValue(statusList, details.status);
+           
+
+            return `
+                <form id="updateForm">
+                    <input type="hidden" id="update_CertNo" value="${details.certNo}">
+                     <input type="hidden" id="update_Serialization" value="${details.serialization}">
+
+                     <div class="row update-form-row">
+                        <div class="col-md-6">
+                         <div class="mb-3">
+        <label class="form-label">3. Edition of Form Tracking No.<span class="error-star" style="color: red;">*</span></label>
+        <input id="update_Edition" class="form-control predefined" value="${details.edition || ''}" maxlength="2" readonly>
+        <small class="form-text text-muted">New edition will be: <strong>${nextEdition}</strong></small>
+    </div>
+                        </div>
+                        <div class="col-md-6">
+                        <div class="mb-3">
+                           <label class="form-label">6. Item<span class="error-star" style="color: red;">*</span></label>
+                            <input id="update_Item" class="form-control predefined" value="${details.item || ''}" readonly>
+                        </div>
+                        </div>
+                    </div>
+
+                     <div class="row update-form-row">
+                        <div class="col-md-6">
+                         <div class="mb-3">
+                                 <label class="form-label">7. Description<span class="error-star" style="color: red;">*</span></label>
+                            <input id="update_ProductDescription" class="form-control predefined" value="${details.productDescription || ''}" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">8. Part No.<span class="error-star" style="color: red;">*</span> </label>
+                            <select id="update_ProductNo" class="form-control predefined" disabled>
+
+                                ${productOptions}
+                            </select>
+                             </div>
+                        </div>
+                    </div>
+
+                    <div class="row update-form-row">
+                        <div class="col-md-6">
+                         <div class="mb-3">
+                                 <label class="form-label">9. Qty.<span class="error-star" style="color: red;">*</span></label>
+                            <input id="update_Quantity" class="form-control mandatory" value="${details.quantity || ''}" placeholder="Enter Quantity" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                         <div class="mb-3">
+                                 <label class="form-label">10. Serial No.<span class="error-star" style="color: red;">*</span></label>
+                            <input id="update_SerialNo" class="form-control ${details.serialization === 'No' ? 'predefined' : 'mandatory'}"  value="${details.serialNo || ''}" placeholder="Enter Serial Number" maxlength="25" ${details.serialization === 'No' ? 'readonly' : ''}>
+                             </div>
+                        </div>
+                    </div>
+
+                     <div class="row update-form-row">
+                        <div class="col-md-6">
+                           <div class="mb-3">
+                                 <label class="form-label">11. Status/Work<span class="error-star" style="color: red;">*</span></label>
+                             <select id="update_Status" class="form-control mandatory" >
+
+                                ${statusOptions}
+                                  </select>
+                        </div>
+                         </div>
+                        <div class="col-md-6">
+                         <div class="mb-3">
+
+
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="row update-form-row">
+                        <div class="col-md-6">
+                         <div class="mb-3">
+                            <label class="form-label">12. Remarks (Line 1)</label>
+                            <textarea id="update_Remarks1" class="form-control" rows="2" maxlength="100" placeholder="Enter Remarks (Line 1)">${details.remarks1 || ''}</textarea>
+                        </div>
+                         </div>
+                        <div class="col-md-6">
+                         <div class="mb-3">
+                            <label class="form-label">12. Remarks (Line 2)</label>
+                            <textarea id="update_Remarks2" class="form-control" rows="2" maxlength="100" placeholder="Enter Remarks (Line 2)">${details.remarks2 || ''}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row update-form-row">
+                        <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">12. Remarks (Line 3)</label>
+                            <textarea id="update_Remarks3" class="form-control" rows="2" maxlength="100" placeholder="Enter Remarks (Line 3)">${details.remarks3 || ''}</textarea>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                          <div class="mb-3">
+                            <label class="form-label">12. Remarks (Line 4)</label>
+                            <textarea id="update_Remarks4" class="form-control" rows="2" maxlength="100" placeholder="Enter Remarks (Line 4)">${details.remarks4 || ''}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+
+
+                      <div class="row update-form-row">
+                        <div class="col-md-6">
+                         <div class="mb-3">
+                            <label class="form-label">12. Remarks (Amendment)<span class="error-star" style="color: red;">*</span></label>
+                            <select class="form-control mandatory" id="update_Amendment" multiple>
+
+                                ${amendmentOptions}
+                            </select>
+                        </div>                       
+                        </div>
+                        <div class="col-md-6">
+                         <div class="mb-5">
+                           <label class="form-label">13a. Approved Design Indicator<span class="error-star" style="color: red;">*</span></label>
+                            <select id="update_Approved" class="form-control mandatory">
+
+                                ${approvedOptions}
+                            </select>
+                              </div>
+                                 <div class="mb-3">
+                              <label class="form-label">13c. Approval/Authorisation Number<span class="error-star" style="color: red;">*</span></label>
+                            <input id="update_Authorisation" class="form-control predefined" value="${details.authorisation || ''}" readonly>
+                             </div>
+                        </div>
+                    </div>
+
+                    <div class="row update-form-row">
+                        <div class="col-md-6">
+                        <div class="mb-3">
+                           <label class="form-label">13d. Name of Signatory<span class="error-star" style="color: red;">*</span></label>
+                             <input type="text" id="update_Signatory" class="form-control predefined" value="${details.signatory || ''}" readonly>
+                         <small id="signatoryChangeHelp" class="form-text text-muted">${signatoryNote}</small>
+                    </div>
+                    </div>
+                        
+                        <div class="col-md-6">
+                         <div class="mb-3">
+                              <label class="form-label">13e. Approval Date<span class="error-star" style="color: red;">*</span></label>
+                            <input id="update_Date" type="date" class="form-control predefined" value="${details.date || ''}" readonly>
+                             <small class="form-text text-muted">New date will be:<strong> ${formattedToday}</strong></small>
+                           </div>
+                        </div>
+                    </div>
+
+
+
+
+
+
+
+
+                    <hr>
+                
+                    <div class="row update-form-row">
+                        <div class="col-md-6">
+                         <div class="mb-3">
+                             <label class="form-label">Status<span class="error-star" style="color: red;">*</span></label>
+                             <select id="update_State" class="form-control mandatory">
+                            
+                                ${stateOptions}
+                            </select>
+                                </div>
+                        </div>
+                        <div class="col-md-6">
+                          <div class="mb-3">
+                            <label class="form-label">Comment</label>
+                            <textarea id="update_Comment" class="form-control" rows="2" maxlength="100" placeholder="Enter Comment">${details.comment|| ''}</textarea>
+                               </div>
+                        </div>
+                    </div>
+
+                    <small class="text-muted"><span class="error-star" style="color: red;">*</span> Field is mandatory</small>
+                </form>
+            `;
+        }
+
+        function createOptionsWithOriginalValue(optionsList, originalValue) {
+            let options = '';
+            let originalValueFound = false;
+
+            optionsList.forEach(item => {
+                const isSelected = item.value === originalValue;
+                if (isSelected) {
+                    originalValueFound = true;
+                }
+                options += `<option value="${item.value}" ${isSelected ? 'selected' : ''}>${item.text}</option>`;
+            });
+
+            if (!originalValueFound && originalValue && originalValue.trim() !== '') {
+                options = `<option value="${originalValue}" selected>${originalValue} (Original)</option>` + options;
+            }
+
+            return options;
+        }
+
+        function createMultiSelectOptions(optionsList, selectedValuesString) {
+            // If the saved value is null or empty, create an empty array.
+            const selectedItems = selectedValuesString ? selectedValuesString.split(',').map(s => s.trim()) : [];
+
+            let optionsHtml = '';
+
+            // Iterate over the full list of available options (from AmendmentListNew).
+            optionsList.forEach(item => {
+                // Check if the current option's value is in our array of selected items.
+                const isSelected = selectedItems.includes(item.value);
+
+                // Add the 'selected' attribute if it's a match.
+                optionsHtml += `<option value="${item.value}" ${isSelected ? 'selected' : ''}>${item.text}</option>`;
+            });
+
+            return optionsHtml;
+        }
+
+        function updateCertificate(certNo) {
+            const mandatoryFields = [
+                { id: 'update_ProductNo', name: 'Product Number' },
+                { id: 'update_SerialNo', name: 'Serial Number' },
+                { id: 'update_Amendment', name: 'Amendment' },
+                { id: 'update_Signatory', name: 'Name of Signatory' },
+                { id: 'update_Date', name: 'Approval Date' },
+                { id: 'update_Edition', name: 'Edition of Certificate' },
+                { id: 'update_Quantity', name: 'Quantity' }
+            ];
+
+            let isValid = true;
+            let errorMessages = [];
+
+            mandatoryFields.forEach(field => {
+                const element = document.getElementById(field.id);
+                if (!element || !element.value.trim()) {
+                    isValid = false;
+                    errorMessages.push(`${field.name} is required.`);
+                    if (element) {
+                        element.classList.add('is-invalid');
+                    }
+                } else {
+                    if (element) {
+                        element.classList.remove('is-invalid');
+                    }
+                }
+            });
+
+            let editionValue = document.getElementById('update_Edition').value;
+            let quantityValue = document.getElementById('update_Quantity').value;
+
+            const editionElement = document.getElementById('update_Edition');
+            if (editionValue.trim()) {
+                const editionNum = parseInt(editionValue, 10);
+                if (isNaN(editionNum) || editionNum < 0 || editionNum > 99) {
+                    isValid = false;
+                    errorMessages.push('Edition must be a number between 0 and 99.');
+                    editionElement.classList.add('is-invalid');
+                } else {
+                    editionValue = editionNum.toString().padStart(2, '0');
+                    editionElement.classList.remove('is-invalid');
+                }
+            }
+
+            const quantityElement = document.getElementById('update_Quantity');
+            if (quantityValue.trim()) {
+                const quantityNum = parseInt(quantityValue, 10);
+                if (isNaN(quantityNum) || quantityNum < 0 || quantityNum > 99999) {
+                    isValid = false;
+                    errorMessages.push('Quantity must be a number between 0 and 99999.');
+                    quantityElement.classList.add('is-invalid');
+                } else {
+                    if (quantityNum < 10) {
+                        quantityValue = quantityNum.toString().padStart(2, '0');
+                    } else {
+                        quantityValue = quantityNum.toString();
+                    }
+                    quantityElement.classList.remove('is-invalid');
+                }
+            }
+
+
+            if (!isValid) {
+                showErrorMessage('Validation Error:<br>' + errorMessages.join('<br>'));
+                return;
+            }
+
+             const amendmentSelect = document.getElementById('update_Amendment');
+    const selectedAmendments = Array.from(amendmentSelect.selectedOptions)
+                                    .map(option => option.value)
+                                    .join(', ');
+
+            const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]');
+            const formData = new FormData();
+
+            formData.append('certNo', certNo);
+            formData.append('productNo', document.getElementById('update_ProductNo').value);
+            formData.append('productDescription', document.getElementById('update_ProductDescription').value); // ADDED
+            
+            formData.append('serialNo', document.getElementById('update_SerialNo').value);
+            formData.append('serialization', document.getElementById('update_Serialization').value);
+            formData.append('amendment', selectedAmendments);
+            formData.append('signatory', document.getElementById('update_Signatory').value);
+            formData.append('date', document.getElementById('update_Date').value);
+            formData.append('edition', editionValue);
+            formData.append('remarks1', document.getElementById('update_Remarks1').value);
+            formData.append('remarks2', document.getElementById('update_Remarks2').value);
+            formData.append('remarks3', document.getElementById('update_Remarks3').value);
+            formData.append('remarks4', document.getElementById('update_Remarks4').value);
+            formData.append('quantity', quantityValue);
+            formData.append('authorisation', document.getElementById('update_Authorisation').value);
+            formData.append('item', document.getElementById('update_Item').value);
+            formData.append('status', document.getElementById('update_Status').value);
+            formData.append('approved', document.getElementById('update_Approved').value);
+            formData.append('state', document.getElementById('update_State').value);
+            formData.append('comment', document.getElementById('update_Comment').value);
+            if (antiForgeryToken) {
+                formData.append('__RequestVerificationToken', antiForgeryToken.value);
+            }
+
+            validatedUpdateData = formData;
+            updateModal.hide();
+            confirmUpdateModal.show();
+        }
+
+            function submitUpdateData() {
+        if (!validatedUpdateData) return;
+
+        const dataToSend = validatedUpdateData;
+        validatedUpdateData = null;
+
+        // Remove the incrementEdition parameter since we're always creating a new version
+        // dataToSend.append('incrementEdition', true); // Remove this line
+
+        confirmUpdateBtn.disabled = true;
+        confirmUpdateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating New Version...';
+
+        fetch('?handler=UpdateCertificate', {
+            method: 'POST',
+            body: dataToSend
+        })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            })
+            .then(data => {
+                if (data.success) {
+                    showSuccessMessage('New certificate version created successfully!');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    throw new Error(data.message || 'Update failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error creating new certificate version:', error);
+                showErrorMessage(`Update error: ${error.message}`);
+                updateModal.show();
+            })
+            .finally(() => {
+                confirmUpdateBtn.disabled = false;
+                confirmUpdateBtn.innerHTML = '<i class="fas fa-save"></i> Update Certificate';
+            });
+    }
+
+
+            function printCertificate(certNo, edition) {
+        const confirmPrintBtn = document.getElementById('confirmPrintFromModal');
+        confirmPrintBtn.disabled = true;
+        confirmPrintBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Printing...';
+
+        const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]');
+        const formData = new FormData();
+        formData.append('certNo', certNo);
+        if (edition) {
+            formData.append('edition', edition);
+        }
+        if (antiForgeryToken) {
+            formData.append('__RequestVerificationToken', antiForgeryToken.value);
+        }
+
+        fetch('?handler=PrintCertificate', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                const contentType = response.headers.get('content-type');
+
+                if (contentType && contentType.includes('application/pdf')) {
+                    return response.blob().then(blob => {
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+
+                        const editionSuffix = edition ? `_Ed${edition}` : '';
+                        a.download = `Certificate_${certNo}${editionSuffix}_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.pdf`;
+
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+
+                        showSuccessMessage('Certificate downloaded successfully!');
+                    });
+                } else {
+                    return response.json().then(data => {
+                        if (data.success === false) {
+                            throw new Error(data.message || 'Print failed');
+                        }
+                    });
+                }
+            } else {
+                return response.json().then(errorData => {
+                        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error printing certificate:', error);
+            showErrorMessage(`Print error: ${error.message}`);
+        })
+        .finally(() => {
+            const printModal = bootstrap.Modal.getInstance(document.getElementById('printModal'));
+            setTimeout(() => {
+                if(printModal) printModal.hide();
+                confirmPrintBtn.disabled = false;
+                confirmPrintBtn.innerHTML = '<i class="fas fa-print"></i> Print Certificate';
+            }, 1000);
+        });
+    }
+
+        let currentUpdateEdition = null;
+    let currentPrintEdition = null;
+
+        function showSuccessMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999;min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-check-circle"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 5000);
+        }
+
+        function showErrorMessage(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(alert);
+
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 8000);
+        }
+
+    });
+
+  
+
+       
+</script>
+
+@section Scripts {
+
+    <script>
+        
+        document.addEventListener("DOMContentLoaded", function () {
+            var searchErrorMsg = "@Html.Raw(Model.SearchErrorMessage)";
+            if (searchErrorMsg && searchErrorMsg.trim() !== "") {
+                showErrorMessage(searchErrorMsg);
+            }
+            var searchValidationMsg = "@Html.Raw(Model.SearchErrorMessage ?? "")";
+            if (searchValidationMsg && searchValidationMsg.trim() !== "") {
+                showErrorMessage(searchValidationMsg);
+            }
+            var showNoResultsFlag = @Json.Serialize(Model.ShowNoResultsMessage);
+            if (showNoResultsFlag === true) {
+                showErrorMessage("No certificates found matching your criteria.");
+            }
+
+            const amendmentSelect = document.getElementById('add_AmendmentSearch');
+
+         if (amendmentSelect) {
+            // This variable will hold the list of selected indexes before a change occurs.
+            let previousSelection = [];
+
+            // We use 'mousedown' to capture the state *before* the 'change' event fires.
+            amendmentSelect.addEventListener('mousedown', function () {
+                previousSelection = Array.from(this.selectedOptions).map(opt => opt.index);
+            });
+
+            // The 'change' event fires *after* the user has made their selection.
+            amendmentSelect.addEventListener('change', function () {
+                const currentSelection = Array.from(this.selectedOptions).map(opt => opt.index);
+
+                // Find which items, if any, were newly added to the selection.
+                const addedItems = currentSelection.filter(index => !previousSelection.includes(index));
+
+                // REQUIREMENT 2: If no new items were added, it was a DESELECTION.
+                // We do nothing and let the user's deselection stand.
+                if (addedItems.length === 0) {
+                    return;
+                }
+
+                // An item was SELECTED. Find the highest index among the newly added items.
+                const maxNewIndex = Math.max(...addedItems);
+
+                // REQUIREMENT 1: If the user selected the first item (index 0),
+                // we also do nothing further, respecting it as a single selection.
+                if (maxNewIndex === 0) {
+                    return;
+                }
+
+                // Apply the cascading logic: select all items from the second option (index 1)
+                // up to the highest newly selected item. This will not affect other selections.
+                for (let i = 1; i <= maxNewIndex; i++) {
+                    this.options[i].selected = true;
+                }
+            });
+        }
+
+        });
+
+
+      
+      
+    </script>
+}
+
+
