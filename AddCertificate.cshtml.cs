@@ -1,10 +1,9 @@
-using DocumentFormat.OpenXml.Spreadsheet;
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Data.SqlClient;
-using QApp.Pages.Authorization;
 using System.ComponentModel.DataAnnotations;
 
 
@@ -211,21 +210,25 @@ namespace QApp.Pages
                 string latestCertNo = null;
                 using (SqlCommand getCmd = new SqlCommand(getCertNoQuery, conn))
                 {
-                    getCmd.Parameters.AddWithValue("@PrefixLike", prefix + "936%");
+                    getCmd.Parameters.AddWithValue("@PrefixLike", prefix + "93%");
                     var result2 = getCmd.ExecuteScalar();
                     latestCertNo = result2 != null ? result2.ToString() : null;
                 }
 
-                int nextNumber = 1;
-                if (!string.IsNullOrEmpty(latestCertNo) && latestCertNo.Length >= 3)
+                int nextNumber = 6000;
+                if (!string.IsNullOrEmpty(latestCertNo) && latestCertNo.Length >= 4)
                 {
-                    if (int.TryParse(latestCertNo.Substring(latestCertNo.Length - 3), out int lastThree))
+                    if (int.TryParse(latestCertNo.Substring(latestCertNo.Length - 4), out int lastFour))
                     {
-                        nextNumber = lastThree + 1;
+                        if (lastFour >= 6000 && lastFour < 9999)
+                        {
+                            nextNumber = lastFour + 1;
+                        }
                     }
                 }
 
-                CertNo = prefix + "936" + nextNumber.ToString("D3");
+                CertNo = prefix + "93" + nextNumber.ToString("D4");
+
 
 
                 string amendmentValue = string.Join(", ", Amendment);
