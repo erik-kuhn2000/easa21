@@ -1,15 +1,22 @@
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+// --- PDFSHARP USINGS ---
 using PdfSharp.Drawing;
 using PdfSharp.Fonts;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.AcroForms;
 using PdfSharp.Pdf.IO;
-
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace QApp.Pages
 {
@@ -160,7 +167,6 @@ namespace QApp.Pages
         }
 
         [Authorize(Policy = "SignatoryAccess")]
-        [Authorize(Policy = "SignatoryAccess")]
         public async Task<IActionResult> OnPostPrintCertificate(string certNo, string edition = null)
         {
             // Step 1: Get the certificate's original details for logging
@@ -259,7 +265,7 @@ namespace QApp.Pages
 
                 if (details.Amendment == ".") { SetFormField(form, "amendment", "", "Arial", 10); }
                 else
-                {SetFormField(form, "amendment", details.Amendment, "Arial", 10); }
+                { SetFormField(form, "amendment", details.Amendment, "Arial", 10); }
 
                 if (details.Approved == "Approved Design Data") { SetFormField(form, "approved", "X", "Arial", 10); }
                 else { SetFormField(form, "notapproved", "X", "Arial", 10); }
@@ -300,9 +306,6 @@ namespace QApp.Pages
                 return stream.ToArray();
             }
         }
-
-        
-        
 
         private void SetFormField(PdfAcroForm form, string fieldName, string value, string fontName, double fontSize)
         {
@@ -394,7 +397,7 @@ namespace QApp.Pages
             return Page();
         }
 
-        private bool UpdateCertificateState(string certNo, string newState, string edition = null)
+        private bool UpdateCertificateState(string certNo, string newState, string edition = null, bool isCancellation = false)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
@@ -421,6 +424,10 @@ namespace QApp.Pages
                             command.Parameters.AddWithValue("@Edition", edition);
                         }
                         int rowsAffected = command.ExecuteNonQuery();
+                        if (rowsAffected > 0 && isCancellation)
+                        {
+                            LogUpdateAction(GetCertificateDetails(certNo, edition), new CertificateDetails { State = "Cancelled" }, certNo, true);
+                        }
                         return rowsAffected > 0;
                     }
                 }
@@ -656,6 +663,10 @@ namespace QApp.Pages
             {
                 return new JsonResult(new { success = false, message = "Certificate not found." });
             }
+            if (originalDetails.State == "Cancelled")
+            {
+                return new JsonResult(new { success = false, message = "Cannot update a cancelled certificate." });
+            }
 
             string currentUserSignatory = GetCurrentUserSignatoryName();
             string finalSignatoryName = originalDetails.Signatory;
@@ -769,6 +780,34 @@ namespace QApp.Pages
             {
                 _logger.LogError(ex, "Error creating new certificate version for {CertNo}", certNo);
                 return new JsonResult(new { success = false, message = $"Update error: {ex.Message}" });
+            }
+        }
+
+        public async Task<IActionResult> OnPostCancelCertificateAsync(string certNo, string edition)
+        {
+            var originalDetails = GetCertificateDetails(certNo, edition);
+            if (originalDetails == null)
+            {
+                return new JsonResult(new { success = false, message = "Certificate not found." });
+            }
+
+            try
+            {
+                var success = UpdateCertificateState(certNo, "Cancelled", edition, true);
+
+                if (success)
+                {
+                    return new JsonResult(new { success = true, message = "Certificate cancelled successfully." });
+                }
+                else
+                {
+                    return new JsonResult(new { success = false, message = "Failed to cancel certificate." });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error cancelling certificate {CertNo}", certNo);
+                return new JsonResult(new { success = false, message = $"Cancellation error: {ex.Message}" });
             }
         }
 
@@ -902,7 +941,7 @@ namespace QApp.Pages
             }
         }
 
-        private void LogUpdateAction(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo)
+        private void LogUpdateAction(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo, bool isCancellation = false)
         {
             try
             {
@@ -910,7 +949,7 @@ namespace QApp.Pages
                 var changesExist = originalDetails.GetType().GetProperties()
                     .Any(prop => !string.Equals(prop.GetValue(originalDetails)?.ToString(), prop.GetValue(newDetails)?.ToString()));
 
-                if (!changesExist)
+                if (!changesExist && !isCancellation)
                 {
                     _logger.LogInformation("Update log for certificate {CertNo} skipped as no fields were changed.", certNo);
                     return; // Nothing to log
@@ -952,26 +991,34 @@ namespace QApp.Pages
                         cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
                         cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
 
-                        // Use the helper for each certificate field
-                        AddParamIfChanged("@ProductNo", originalDetails.ProductNo, newDetails.ProductNo);
-                        AddParamIfChanged("@ProductDescription", originalDetails.ProductDescription, newDetails.ProductDescription);
-                        AddParamIfChanged("@SerialNo", originalDetails.SerialNo, newDetails.SerialNo);
-                        AddParamIfChanged("@Serialization", originalDetails.Serialization, newDetails.Serialization);
-                        AddParamIfChanged("@Amendment", originalDetails.Amendment, newDetails.Amendment);
-                        AddParamIfChanged("@Signatory", originalDetails.Signatory, newDetails.Signatory);
-                        AddParamIfChanged("@Date", originalDetails.Date, newDetails.Date);
-                        AddParamIfChanged("@Edition", originalDetails.Edition, newDetails.Edition);
-                        AddParamIfChanged("@Remarks1", originalDetails.Remarks1, newDetails.Remarks1);
-                        AddParamIfChanged("@Remarks2", originalDetails.Remarks2, newDetails.Remarks2);
-                        AddParamIfChanged("@Remarks3", originalDetails.Remarks3, newDetails.Remarks3);
-                        AddParamIfChanged("@Remarks4", originalDetails.Remarks4, newDetails.Remarks4);
-                        AddParamIfChanged("@Quantity", originalDetails.Quantity, newDetails.Quantity);
-                        AddParamIfChanged("@Authorisation", originalDetails.Authorisation, newDetails.Authorisation);
-                        AddParamIfChanged("@Item", originalDetails.Item, newDetails.Item);
-                        AddParamIfChanged("@Status", originalDetails.Status, newDetails.Status);
-                        AddParamIfChanged("@Approved", originalDetails.Approved, newDetails.Approved);
-                        AddParamIfChanged("@State", originalDetails.State, newDetails.State);
-                        AddParamIfChanged("@Comment", originalDetails.Comment, newDetails.Comment);
+                        if (isCancellation)
+                        {
+                            cmd.Parameters.AddWithValue("@State", "Cancelled");
+                        }
+                        else
+                        {
+                            // Use the helper for each certificate field
+                            AddParamIfChanged("@ProductNo", originalDetails.ProductNo, newDetails.ProductNo);
+                            AddParamIfChanged("@ProductDescription", originalDetails.ProductDescription, newDetails.ProductDescription);
+                            AddParamIfChanged("@SerialNo", originalDetails.SerialNo, newDetails.SerialNo);
+                            AddParamIfChanged("@Serialization", originalDetails.Serialization, newDetails.Serialization);
+                            AddParamIfChanged("@Amendment", originalDetails.Amendment, newDetails.Amendment);
+                            AddParamIfChanged("@Signatory", originalDetails.Signatory, newDetails.Signatory);
+                            AddParamIfChanged("@Date", originalDetails.Date, newDetails.Date);
+                            AddParamIfChanged("@Edition", originalDetails.Edition, newDetails.Edition);
+                            AddParamIfChanged("@Remarks1", originalDetails.Remarks1, newDetails.Remarks1);
+                            AddParamIfChanged("@Remarks2", originalDetails.Remarks2, newDetails.Remarks2);
+                            AddParamIfChanged("@Remarks3", originalDetails.Remarks3, newDetails.Remarks3);
+                            AddParamIfChanged("@Remarks4", originalDetails.Remarks4, newDetails.Remarks4);
+                            AddParamIfChanged("@Quantity", originalDetails.Quantity, newDetails.Quantity);
+                            AddParamIfChanged("@Authorisation", originalDetails.Authorisation, newDetails.Authorisation);
+                            AddParamIfChanged("@Item", originalDetails.Item, newDetails.Item);
+                            AddParamIfChanged("@Status", originalDetails.Status, newDetails.Status);
+                            AddParamIfChanged("@Approved", originalDetails.Approved, newDetails.Approved);
+                            AddParamIfChanged("@State", originalDetails.State, newDetails.State);
+                            AddParamIfChanged("@Comment", originalDetails.Comment, newDetails.Comment);
+                        }
+
 
                         cmd.ExecuteNonQuery();
                     }
@@ -1000,15 +1047,15 @@ namespace QApp.Pages
                     if (stateChanged)
                     {
                         cmd.Parameters.AddWithValue("@State", "Printed");
-                
+
                     }
                     else
                     {
                         cmd.Parameters.AddWithValue("@State", DBNull.Value);
-                       
+
                     }
 
-                   
+
                     cmd.Parameters.AddWithValue("@Edition", edition ?? (object)DBNull.Value);
                     cmd.ExecuteNonQuery();
                 }
@@ -1202,7 +1249,7 @@ namespace QApp.Pages
             SignatoryList = new List<SelectListItem>();
             using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Signatory FROM Certificates ORDER BY Signatory"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { SignatoryList.Add(new SelectListItem { Value = reader["Signatory"].ToString(), Text = reader["Signatory"].ToString() }); } } }
             SignatoryListNew = new List<SelectListItem>();
-            
+
             StateList = new List<SelectListItem>();
             using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT State FROM Certificates WHERE State IS NOT NULL AND State != '' ORDER BY State"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { StateList.Add(new SelectListItem { Value = reader["State"].ToString(), Text = reader["State"].ToString() }); } } }
             StateListNew = new List<SelectListItem>();
@@ -1212,14 +1259,14 @@ namespace QApp.Pages
             ApprovedList = new List<SelectListItem>();
             using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Approved FROM Certificates ORDER BY Approved"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { ApprovedList.Add(new SelectListItem { Value = reader["Approved"].ToString(), Text = reader["Approved"].ToString() }); } } }
             ApprovedListNew = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT ApprovedDesignIndicator FROM ApprovedDesignIndicators ORDER BY ApprovedDesignIndicator"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) {ApprovedListNew.Add(new SelectListItem { Value = reader["ApprovedDesignIndicator"].ToString(), Text = reader["ApprovedDesignIndicator"].ToString() }); } } }
+            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT ApprovedDesignIndicator FROM ApprovedDesignIndicators ORDER BY ApprovedDesignIndicator"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { ApprovedListNew.Add(new SelectListItem { Value = reader["ApprovedDesignIndicator"].ToString(), Text = reader["ApprovedDesignIndicator"].ToString() }); } } }
 
 
             StatusList = new List<SelectListItem>();
             using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Status FROM Certificates ORDER BY Status"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { StatusList.Add(new SelectListItem { Value = reader["Status"].ToString(), Text = reader["Status"].ToString() }); } } }
             StatusListNew = new List<SelectListItem>();
             using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Status FROM Statuses ORDER BY Status"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { StatusListNew.Add(new SelectListItem { Value = reader["Status"].ToString(), Text = reader["Status"].ToString() }); } } }
-            
+
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             var userId = User.Identity?.Name;
 
@@ -1247,4 +1294,5 @@ namespace QApp.Pages
             }
         }
     }
-    }
+}
+
