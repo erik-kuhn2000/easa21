@@ -8,6 +8,11 @@
 }
 
 
+@{
+    var showComment = 0;
+
+}
+
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="page-title">Search Certificate</h1>
     <div>
@@ -28,7 +33,7 @@
                 </div>
                 <div class="col-md-3">
                     <label asp-for="SearchCriteria.Edition" class="form-label">3. Edition of Form Tracking No.</label>
-                    <input asp-for="SearchCriteria.Edition" class="form-control" maxlength="2" placeholder="All">
+                    <input asp-for="SearchCriteria.Edition" class="form-control" maxlength="2" placeholder="All" oninput="this.value = this.value.replace(/[^0-9]/g, '')"  onblur="formatEditionInput(this)">
                 </div>
                 <div class="col-md-3">
                     <label asp-for="SearchCriteria.ProductNo" class="form-label">8. Part No.</label>
@@ -38,7 +43,7 @@
                 </div>
                 <div class="col-md-3">
                     <label asp-for="SearchCriteria.Quantity" class="form-label">9. Qty.</label>
-                    <input asp-for="SearchCriteria.Quantity" class="form-control" maxlength="4" placeholder="All">
+                    <input asp-for="SearchCriteria.Quantity" class="form-control" maxlength="5" placeholder="All" oninput="this.value = this.value.replace(/[^0-9]/g, '')" onblur="formatQuantityInput(this)">
                 </div>
 
                 <div class="col-md-3">
@@ -94,6 +99,7 @@
     </div>
     @{
         var isAdmin = (await AuthorizationService.AuthorizeAsync(User, "AdminOnly")).Succeeded;
+        var isSignatory = (await AuthorizationService.AuthorizeAsync(User, "SignatoryRoleRequired")).Succeeded;
     }
 
 
@@ -102,7 +108,7 @@
 
 
 
-        @if (isAdmin)
+        @if (isAdmin || isSignatory)
         {
             <div class="d-flex justify-content-end mb-3">
                 <button type="submit" id="exportBtn" class="btn btn-primary" asp-page-handler="Export">
@@ -152,11 +158,12 @@
                                     @{
                                         var isAuthorized = await Model.IsUserAuthorizedToUpdate(cert.CertNo);
                                         var isCancelled = string.Equals(cert.State, "Cancelled", StringComparison.OrdinalIgnoreCase);
+                                        var isInvalid = string.Equals(cert.State, "Invalid", StringComparison.OrdinalIgnoreCase);
                                     }
 
                                     @if (isAuthorized)
                                     {
-                                        if (isCancelled)
+                                        if (isCancelled || isInvalid)
                                         {
                                             <button type="button" class="btn btn-secondary" disabled title="This certificate has been cancelled.">
                                                 <i class="fas fa-edit"></i>
@@ -198,7 +205,6 @@
                 </tbody>
             </table>
         </div>
-
 
 
 
@@ -416,6 +422,31 @@
     </div>
 </div>
 
+<div class="modal fade" id="confirmDirectUpdateModal" tabindex="-1" aria-labelledby="confirmDirectUpdateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmDirectUpdateModalLabel">Confirm Update</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <strong>You're about to update the current certificate edition directly.</strong><br />
+                The edition number of the certificate will not be increased.<br />
+                The approval date of this editon of the certificate will be set to today.<br />
+                If you're not already the signatory, this editon of the certificate will be automatically assigned to your name.<br />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="finalDirectUpdateBtn">
+                    <i class="fas fa-check me-2"></i>Confirm 
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="confirmCancelModal" tabindex="-1" aria-labelledby="confirmCancelModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -424,15 +455,20 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <strong>Are you sure you want to cancel this certificate?</strong><br />
-                This action will set the state to "Cancelled" and cannot be undone. No new edition will be created.
+                <strong>You're about to cancel this certificate.</strong><br />
+                This will set the state of the edition of the certificate to "Cancelled".<br />
+                This edition of the certificate will not longer be printable.<br />
+                Updating the certificate will not longer be possible.<br />
+                No new edition will be created.<br />
+                This action can not be undone.<br />
+                If you need another certificate to replace this certificate, please create it via <strong>Add Certificate</strong> before cancelling this certificate.
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-xmark btn-icon me-2"></i>No
+                    <i class="fas fa-xmark btn-icon me-2"></i>Cancel
                 </button>
-                <button type="button" class="btn btn-danger" id="finalCancelBtn">
-                    <i class="fas fa-check btn-icon me-2"></i>Yes, Cancel Certificate
+                <button type="button" class="btn btn-primary" id="finalCancelBtn">
+                    <i class="fas fa-check btn-icon me-2"></i>Confirm
                 </button>
             </div>
         </div>
@@ -445,6 +481,27 @@
 <script>
        document.addEventListener('DOMContentLoaded', function () {
 
+            let initialFormState = null; // <<< ADD THIS LINE
+
+        // vvv ADD THIS HELPER FUNCTION vvv
+        function getFormValues(formId) {
+            const form = document.getElementById(formId);
+            if (!form) return {};
+
+            const values = {};
+            const elements = form.querySelectorAll('input, select, textarea');
+
+            elements.forEach(el => {
+                if (el.type === 'select-multiple') {
+                    // Special handling for multi-select to ensure consistent order for comparison
+                    const selected = Array.from(el.selectedOptions).map(opt => opt.value).sort();
+                    values[el.id] = selected.join(',');
+                } else {
+                    values[el.id] = el.value;
+                }
+            });
+            return values;
+        }
             const currentUserSignatoryName = @Html.Raw(Json.Serialize(Model.CurrentUserSignatoryName));
 
             const exportBtn = document.getElementById('exportBtn');
@@ -540,7 +597,7 @@
                    headers.forEach(h => h.classList.remove('asc', 'desc'));
                    header.classList.add(newDirection);
 
-                    sortTable(table, index, sortType, newDirection);
+                   sortTable(table, index, sortType, newDirection);
                });
            });
            function sortTable(table, columnIndex, sortType, direction) {
@@ -554,17 +611,17 @@
                    let comparison = 0;
 
                    switch (sortType) {
-                        case 'number':
+                       case 'number':
                            comparison = parseFloat(aValue) - parseFloat(bValue);
                            break;
                        case 'date':
 
-    comparison = new Date(aValue) - new Date(bValue);
+                           comparison = new Date(aValue) - new Date(bValue);
                            break;
                        default:
                            comparison = aValue.localeCompare(bValue);
 
-    break;
+                           break;
                    }
 
                    return direction === 'asc' ? comparison : -comparison;
@@ -596,6 +653,9 @@
            const confirmUpdateModal = new bootstrap.Modal(confirmUpdateModalEl);
            let validatedUpdateData = null;
 
+           const confirmDirectUpdateModalEl = document.getElementById('confirmDirectUpdateModal');
+           const confirmDirectUpdateModal = new bootstrap.Modal(confirmDirectUpdateModalEl);
+
            const confirmCancelModalEl = document.getElementById('confirmCancelModal');
            const confirmCancelModal = new bootstrap.Modal(confirmCancelModalEl);
 
@@ -604,6 +664,13 @@
            confirmUpdateModal.hide();
            if (validatedUpdateData) {
                submitUpdateData(); // No longer needs increment parameter
+           }
+       });
+
+       document.getElementById('finalDirectUpdateBtn').addEventListener('click', function () {
+           confirmDirectUpdateModal.hide();
+           if (validatedUpdateData) {
+               submitUpdateData();
            }
        });
 
@@ -645,7 +712,7 @@
                const edition = button.getAttribute('data-edition');
                if (certNo) {
 
-    showPrintCertificateDetails(certNo, edition);
+                   showPrintCertificateDetails(certNo, edition);
                }
            }
        });
@@ -722,18 +789,34 @@
            }
 
            function displayUpdateForm(details) {
-               const formHtml = createUpdateFormHTML(details);
-               updateModalBody.innerHTML = formHtml;
-               confirmUpdateBtn.disabled = false;
-                attachAmendmentLogic('update_Amendment');
+            const formHtml = createUpdateFormHTML(details);
+            updateModalBody.innerHTML = formHtml;
+            confirmUpdateBtn.disabled = true; // CHANGED: Start with the button disabled
+            attachAmendmentLogic('update_Amendment');
 
+            // --- vvv ADD THIS NEW LOGIC vvv ---
+            const updateForm = document.getElementById('updateForm');
+            if (updateForm) {
+                // 1. Capture the initial state of the form
+                initialFormState = getFormValues('updateForm');
 
+                // 2. Listen for any input changes on the form
+                updateForm.addEventListener('input', () => {
+                    const currentFormState = getFormValues('updateForm');
 
-           }
+                    // 3. Compare initial vs. current state to see if anything has changed
+                    const hasChanged = JSON.stringify(initialFormState) !== JSON.stringify(currentFormState);
+
+                    // 4. Enable/disable the button based on whether there's a change
+                    confirmUpdateBtn.disabled = !hasChanged;
+                });
+            }
+            // --- ^^^ END OF NEW LOGIC ^^^ ---
+        }
 
            function displayPrintCertificateDetails(details) {
                const detailsHtml = createDetailsHTML(details);
-               printModalBody.innerHTML = `<div class="alert alert-info mb-3"><i class="fas fa-info-circle me-2"></i><strong>Print Certificate:</strong> Review the certificate details below and click "Print" to generate and download the certificate file. The printing action will set the State of the certificate to "Printed" if its not already set to "Canceled".</div>${detailsHtml}`;
+               printModalBody.innerHTML = `<div class="alert alert-info mb-3"><i class="fas fa-info-circle me-2"></i><strong>Print Certificate:</strong> Review the certificate details below and click "Print" to generate and download the certificate file. The printing action will set the state of the certificate to "Printed".</div>${detailsHtml}`;
                confirmPrintBtn.disabled = false;
            }
 
@@ -765,12 +848,12 @@
                    <style>
                        .remarks-value {
                            word-wrap: break-word;
-    white-space: pre-wrap;
+                           white-space: pre-wrap;
                            overflow-wrap: break-word;
                        }
                        .description-value {
                            word-wrap: break-word;
-    white-space: pre-wrap;
+                           white-space: pre-wrap;
                            overflow-wrap: break-word;
                            background-color: #f8f9fa;
                            padding: 5px;
@@ -808,9 +891,11 @@
                             <div class="certificate-detail-row"><div class="detail-label">State:</div><div class="detail-value">${details.state || '-'}</div></div>
 
                        </div>
-                       <div class="col-md-6">
-                            <div class="certificate-detail-row"><div class="detail-label">Comment:</div><div class="detail-value">${details.comment || '-'}</div></div>
 
+                       <div class="col-md-6">
+                        @if (showComment == 1){
+                            <div class="certificate-detail-row"><div class="detail-label">Comment:</div><div class="detail-value">${details.comment || '-'}</div></div>
+                            }
                        </div>
                    </div>
 
@@ -832,6 +917,12 @@
            // The new signatory will be the current user
            signatoryNote = `New signatory will be you (<strong>${currentUserSignatoryName}</strong>).`;
        }
+               let editionInfo = '';
+               if (details.state !== 'Valid') {
+                   const currentEdition = parseInt(details.edition) || 0;
+                   const nextEdition = (currentEdition + 1).toString().padStart(2, '0');
+                   editionInfo = `<small class="form-text text-muted">New edition will be: <strong>${nextEdition}</strong></small>`;
+               }
 
                  const currentEdition = parseInt(details.edition) || 0;
                const nextEdition = (currentEdition + 1).toString().padStart(2, '0');
@@ -851,11 +942,11 @@
                             <div class="mb-3">
            <label class="form-label">3. Edition of Form Tracking No.<span class="error-star" style="color: red;">*</span></label>
            <input id="update_Edition" class="form-control predefined" value="${details.edition || ''}" maxlength="2" readonly>
-           <small class="form-text text-muted">New edition will be: <strong>${nextEdition}</strong></small>
+           ${editionInfo}
        </div>
                            </div>
                            <div class="col-md-6">
-                              <div class="mb-3">
+                                <div class="mb-3">
                               <label class="form-label">6. Item<span class="error-star" style="color: red;">*</span></label>
                                <input id="update_Item" class="form-control predefined" value="${details.item || ''}" readonly>
                            </div>
@@ -876,7 +967,7 @@
 
                                    ${productOptions}
                                </select>
-                                </div>
+                                 </div>
                            </div>
                        </div>
 
@@ -884,7 +975,7 @@
                             <div class="col-md-6">
                             <div class="mb-3">
                                     <label class="form-label">9. Qty.<span class="error-star" style="color: red;">*</span></label>
-                               <input id="update_Quantity" class="form-control mandatory" value="${details.quantity || ''}" placeholder="Enter Quantity" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                               <input id="update_Quantity" class="form-control mandatory" value="${details.quantity || ''}" placeholder="Enter Quantity" maxlength="5" oninput="this.value = this.value.replace(/[^0-9]/g, '');" onblur="formatQuantityInput(this)">
                                </div>
                            </div>
                             <div class="col-md-6">
@@ -896,13 +987,13 @@
                        </div>
 
                         <div class="row update-form-row">
-                            <div class="col-md-6">
+                             <div class="col-md-6">
                               <div class="mb-3">
                                     <label class="form-label">11. Status/Work<span class="error-star" style="color: red;">*</span></label>
                                 <select id="update_Status" class="form-control mandatory" >
 
                                    ${statusOptions}
-                                     </select>
+                                      </select>
                            </div>
                             </div>
                            <div class="col-md-6">
@@ -956,14 +1047,14 @@
                             </div>
                            </div>
                            <div class="col-md-6">
-                             <div class="mb-5">
+                            <div class="mb-5">
 
                                 <label class="form-label">13a. Approved Design Indicator<span class="error-star" style="color: red;">*</span></label>
                            <select id="update_Approved" class="form-control mandatory">
 
                                    ${approvedOptions}
                                </select>
-                                  </div>
+                                      </div>
                                     <div class="mb-3">
                                  <label class="form-label">13c. Approval/Authorisation Number<span class="error-star" style="color: red;">*</span></label>
                                <input id="update_Authorisation" class="form-control predefined" value="${details.authorisation || ''}" readonly>
@@ -974,7 +1065,7 @@
                        <div class="row update-form-row">
                            <div class="col-md-6">
                            <div class="mb-3">
-                                <label class="form-label">13d. Name of Signatory<span class="error-star" style="color: red;">*</span></label>
+                              <label class="form-label">13d. Name of Signatory<span class="error-star" style="color: red;">*</span></label>
                                 <input type="text" id="update_Signatory" class="form-control predefined" value="${details.signatory || ''}" readonly>
                             <small id="signatoryChangeHelp" class="form-text text-muted">${signatoryNote}</small>
                        </div>
@@ -1002,18 +1093,19 @@
                            <div class="col-md-6">
                             <div class="mb-3">
                                 <label class="form-label">Status<span class="error-star" style="color: red;">*</span></label>
-                                  <select id="update_State" class="form-control mandatory">
+                                <select id="update_State" class="form-control mandatory">
 
                                    ${stateOptions}
-                                </select>
+                            </select>
                                    </div>
                            </div>
-                           <div class="col-md-6">
-                              <div class="mb-3">
-                               <label class="form-label">Comment</label>
-                               <textarea id="update_Comment" class="form-control" rows="2" maxlength="100" placeholder="Enter Comment">${details.comment|| ''}</textarea>
-                                  </div>
-                           </div>
+                               
+                            <div class="col-md-6">
+                                <div class="mb-3" @(showComment == 1 ? "" : "style=display:none;")>
+                                  <label class="form-label">Comment</label>
+                                <textarea id="update_Comment" class="form-control" rows="2" maxlength="100" placeholder="Enter Comment">${details.comment|| ''}</textarea>
+                            </div>
+                            </div>
                        </div>
 
                        <small class="text-muted"><span class="error-star" style="color: red;">*</span> Field is mandatory</small>
@@ -1163,7 +1255,11 @@
 
                validatedUpdateData = formData;
                updateModal.hide();
-               confirmUpdateModal.show();
+               if (stateSelect.value === 'Valid') {
+                   confirmDirectUpdateModal.show();
+               } else {
+                   confirmUpdateModal.show();
+               }
            }
 
                function submitUpdateData() {
@@ -1246,75 +1342,81 @@
        }
 
 
-               function printCertificate(certNo, edition) {
-           const confirmPrintBtn = document.getElementById('confirmPrintFromModal');
-           confirmPrintBtn.disabled = true;
-           confirmPrintBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Printing...';
+                   function printCertificate(certNo, edition) {
+        const confirmPrintBtn = document.getElementById('confirmPrintFromModal');
+        confirmPrintBtn.disabled = true;
+        confirmPrintBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Printing...';
 
-           const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]');
-           const formData = new FormData();
-           formData.append('certNo', certNo);
-           if (edition) {
-               formData.append('edition', edition);
-           }
-           if (antiForgeryToken) {
-               formData.append('__RequestVerificationToken', antiForgeryToken.value);
-           }
+        const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]');
+        const formData = new FormData();
+        formData.append('certNo', certNo);
+        if (edition) {
+            formData.append('edition', edition);
+        }
+        if (antiForgeryToken) {
+            formData.append('__RequestVerificationToken', antiForgeryToken.value);
+        }
 
-           fetch('?handler=PrintCertificate', {
-               method: 'POST',
-               body: formData
-           })
-           .then(response => {
-               if (response.ok) {
-                   const contentType = response.headers.get('content-type');
+        fetch('?handler=PrintCertificate', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                const contentType = response.headers.get('content-type');
 
-                    if (contentType && contentType.includes('application/pdf')) {
-                       return response.blob().then(blob => {
-                           const url = window.URL.createObjectURL(blob);
-                           const a = document.createElement('a');
-                            a.style.display = 'none';
-                           a.href = url;
+                if (contentType && contentType.includes('application/pdf')) {
+                    return response.blob().then(blob => {
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
 
-                           const editionSuffix = edition ? `_Ed${edition}` : '';
-                           a.download = `Certificate_${certNo}${editionSuffix}_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.pdf`;
+                        const editionSuffix = edition ? `_Ed${edition}` : '';
+                        a.download = `Certificate_${certNo}${editionSuffix}_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.pdf`;
 
-                            document.body.appendChild(a);
-                           a.click();
-                           window.URL.revokeObjectURL(url);
-                           document.body.removeChild(a);
-                           showSuccessMessage('Certificate downloaded successfully!');
-                       });
-                   } else {
-                       return response.json().then(data => {
-                           if (data.success === false) {
-                               throw new Error(data.message || 'Print failed');
-                            }
-                       });
-                   }
-               } else {
-                   return response.json().then(errorData => {
-                           throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-                   });
-               }
-           })
-           .catch(error => {
-               console.error('Error printing certificate:', error);
-               showErrorMessage(`Print error: ${error.message}`);
-           })
-           .finally(() => {
-               const printModal = bootstrap.Modal.getInstance(document.getElementById('printModal'));
-               setTimeout(() => {
-                    if(printModal) printModal.hide();
-                   confirmPrintBtn.disabled = false;
-                   confirmPrintBtn.innerHTML = '<i class="fas fa-print"></i> Print Certificate';
-               }, 1000);
-           });
-       }
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                        showSuccessMessage('Certificate downloaded successfully!');
+
+                        // --- THIS IS THE ADDED CODE ---
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1500);
+                        // -----------------------------
+                    });
+                } else {
+                    return response.json().then(data => {
+                        if (data.success === false) {
+                            throw new Error(data.message || 'Print failed');
+                        }
+                    });
+                }
+            } else {
+                return response.json().then(errorData => {
+                        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error printing certificate:', error);
+            showErrorMessage(`Print error: ${error.message}`);
+        })
+        .finally(() => {
+            const printModal = bootstrap.Modal.getInstance(document.getElementById('printModal'));
+            setTimeout(() => {
+                if(printModal) printModal.hide();
+                confirmPrintBtn.disabled = false;
+                confirmPrintBtn.innerHTML = '<i class="fas fa-print"></i> Print Certificate';
+            }, 1000);
+        });
+    }
 
            let currentUpdateEdition = null;
        let currentPrintEdition = null;
-       function showSuccessMessage(message) {
+           function showSuccessMessage(message) {
                const alert = document.createElement('div');
                alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
                alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999;min-width: 300px;';
@@ -1325,7 +1427,7 @@
                        alert.parentNode.removeChild(alert);
                    }
                }, 5000);
-       }
+           }
 
            function showErrorMessage(message) {
                const alert = document.createElement('div');
@@ -1338,11 +1440,53 @@
                        alert.parentNode.removeChild(alert);
                    }
                }, 8000);
-       }
+           }
 
        });
 
+      // This function is for the search form's "Edition" field
+    function formatEditionInput(inputElement) {
+        if (!inputElement) return;
 
+        let value = inputElement.value.trim();
+        if (value === '') return;
+
+        const num = parseInt(value, 10);
+
+        if (!isNaN(num) && num >= 0) {
+            // This pads any number to two digits. '0' becomes '00', '7' becomes '07'.
+            inputElement.value = num.toString().padStart(2, '0');
+        } else {
+            // If input is invalid (e.g., "abc"), clear the field
+            inputElement.value = '';
+        }
+    }
+
+    // This function is for the update modal's "Quantity" field
+    function formatQuantityInput(inputElement) {
+        if (!inputElement) return;
+
+        let value = inputElement.value.trim();
+        if (value === '') return;
+
+        const num = parseInt(value, 10);
+
+        if (!isNaN(num)) {
+            if (num === 0) {
+                // If the user enters 0 or 00, it defaults to '01'
+                inputElement.value = '01';
+            } else if (num > 0) {
+                // For any other number, it pads to two digits
+                inputElement.value = num.toString().padStart(2, '0');
+            } else {
+                // For negative or invalid numbers, it also defaults to '01'
+                inputElement.value = '01';
+            }
+        } else {
+            // If input is not a number, default to '01'
+            inputElement.value = '01';
+        }
+    }
 
 
 </script>

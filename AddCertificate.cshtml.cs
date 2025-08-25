@@ -150,9 +150,24 @@ namespace QApp.Pages
                 return Page();
             }
 
-            if (string.IsNullOrWhiteSpace(Quantity) || !System.Text.RegularExpressions.Regex.IsMatch(Quantity, @"^(0[1-9]|[1-9][0-9]{1,3})$"))
+            if (int.TryParse(Quantity, out int qtyValue))
             {
-                ModelState.AddModelError(nameof(Quantity), "Wrong input format.");
+                // Check if the parsed number is in a valid range (e.g., 1 to 9999)
+                if (qtyValue > 0 && qtyValue <= 9999)
+                {
+                    // This is the key: Reformat the Quantity property to always have at least two digits.
+                    // 6 becomes "06", 10 remains "10", etc.
+                    Quantity = qtyValue.ToString("D2");
+                }
+                else
+                {
+                    ModelState.AddModelError(nameof(Quantity), "Quantity must be a positive number.");
+                    return Page();
+                }
+            }
+            else
+            {
+                ModelState.AddModelError(nameof(Quantity), "Quantity must be a valid number.");
                 return Page();
             }
 

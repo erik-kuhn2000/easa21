@@ -1,13 +1,9 @@
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
-// --- PDFSHARP USINGS ---
-using PdfSharp.Drawing;
 using PdfSharp.Fonts;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.AcroForms;
@@ -17,6 +13,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+
 
 namespace QApp.Pages
 {
@@ -656,9 +653,9 @@ namespace QApp.Pages
       string serialNo, string serialization, string amendment, string signatory, string date,
       string edition, string remarks1, string remarks2, string remarks3, string remarks4,
       string quantity, string authorisation, string item, string status, string approved,
-      string state, string comment, bool incrementEdition)
+      string state, string comment)
         {
-            var originalDetails = GetCertificateDetails(certNo);
+            var originalDetails = GetCertificateDetails(certNo, edition);
             if (originalDetails == null)
             {
                 return new JsonResult(new { success = false, message = "Certificate not found." });
@@ -694,24 +691,7 @@ namespace QApp.Pages
                 {
                     errors.Add("Edition of Certificate is required.");
                 }
-                else if (int.TryParse(edition, out int editionNum))
-                {
-                    // Always increment edition when creating new entry
-                    editionNum++;
 
-                    if (editionNum < 0 || editionNum > 99)
-                    {
-                        errors.Add("Edition increment would result in a value outside the range 00-99.");
-                    }
-                    else
-                    {
-                        edition = editionNum.ToString("D2");
-                    }
-                }
-                else
-                {
-                    errors.Add("Edition has an invalid format.");
-                }
 
                 if (string.IsNullOrWhiteSpace(quantity))
                 {
@@ -758,13 +738,37 @@ namespace QApp.Pages
                     Item = item,
                     Status = status,
                     Approved = approved,
-                    State = "Valid",
+                    State = state,
                     Comment = comment,
                     ProductType = originalDetails.ProductType,
                     Manufacturer = originalDetails.Manufacturer,
                 };
+                bool success;
+                if (originalDetails.State == "Valid")
+                {
+                    success = UpdateCertificateInDatabase(originalDetails, newDetails, certNo, edition);
+                }
+                else
+                {
+                    if (int.TryParse(edition, out int editionNum))
+                    {
 
-                var success = InsertNewCertificateVersion(originalDetails, newDetails, certNo);
+                        editionNum++;
+                        if (editionNum < 0 || editionNum > 99)
+                        {
+                            errors.Add("Edition increment would result in a value outside the range 00-99.");
+                        }
+                        else
+                        {
+                            newDetails.Edition = editionNum.ToString("D2");
+                        }
+                    }
+                    else
+                    {
+                        errors.Add("Edition has an invalid format.");
+                    }
+                    success = InsertNewCertificateVersion(originalDetails, newDetails, certNo);
+                }
 
                 if (success)
                 {
@@ -871,7 +875,7 @@ namespace QApp.Pages
             }
         }
 
-        private bool UpdateCertificateInDatabase(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo)
+        private bool UpdateCertificateInDatabase(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo, string edition)
         {
             var setClauses = new List<string>();
             var parameters = new List<SqlParameter>();
@@ -922,12 +926,14 @@ namespace QApp.Pages
                 {
                     connection.Open();
                     // Dynamically join the SET clauses
-                    var sql = $"UPDATE Certificates SET {string.Join(", ", setClauses)} WHERE CertNo = @CertNo";
+                    var sql = $"UPDATE Certificates SET {string.Join(", ", setClauses)} WHERE CertNo = @CertNo AND Edition = @Edition";
 
                     using (SqlCommand command = new SqlCommand(sql, connection))
                     {
                         command.Parameters.AddRange(parameters.ToArray());
                         command.Parameters.AddWithValue("@CertNo", certNo); // Add the WHERE clause parameter
+                        command.Parameters.AddWithValue("@Edition", edition);
+
 
                         int rowsAffected = command.ExecuteNonQuery();
                         return rowsAffected > 0;
@@ -973,8 +979,17 @@ namespace QApp.Pages
                     using (SqlCommand cmd = new SqlCommand(logquery, conn))
                     {
                         // Helper function to add the parameter's value only if it has changed
+                        // Corrected code
                         void AddParamIfChanged(string paramName, string originalValue, string newValue)
                         {
+                            // Treat null, empty, and whitespace strings as equivalent.
+                            if (string.IsNullOrWhiteSpace(originalValue) && string.IsNullOrWhiteSpace(newValue))
+                            {
+                                cmd.Parameters.AddWithValue(paramName, DBNull.Value);
+                                return;
+                            }
+
+                            // Perform a direct comparison for non-empty values.
                             if (string.Equals(originalValue, newValue))
                             {
                                 cmd.Parameters.AddWithValue(paramName, DBNull.Value);
@@ -993,11 +1008,32 @@ namespace QApp.Pages
 
                         if (isCancellation)
                         {
+                            // Log that the state was changed to Cancelled
                             cmd.Parameters.AddWithValue("@State", "Cancelled");
+
+                            // Add DBNull for all other parameters to satisfy the INSERT query
+                            cmd.Parameters.AddWithValue("@ProductNo", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@ProductDescription", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@SerialNo", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Serialization", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Amendment", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Signatory", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Date", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Edition", (object)originalDetails.Edition ?? DBNull.Value); // Log the edition that was cancelled
+                            cmd.Parameters.AddWithValue("@Remarks1", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Remarks2", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Remarks3", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Remarks4", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Quantity", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Authorisation", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Item", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Status", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Approved", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Comment", (object)newDetails.Comment ?? DBNull.Value);
                         }
                         else
                         {
-                            // Use the helper for each certificate field
+                            // This part for regular updates remains unchanged
                             AddParamIfChanged("@ProductNo", originalDetails.ProductNo, newDetails.ProductNo);
                             AddParamIfChanged("@ProductDescription", originalDetails.ProductDescription, newDetails.ProductDescription);
                             AddParamIfChanged("@SerialNo", originalDetails.SerialNo, newDetails.SerialNo);
@@ -1295,4 +1331,3 @@ namespace QApp.Pages
         }
     }
 }
-

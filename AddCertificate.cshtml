@@ -3,6 +3,12 @@
 @{
     ViewData["Title"] = "Add";
 }
+
+@{
+    var showComment = 0;
+  
+}
+
 <form method="post" id="addForm">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -55,8 +61,9 @@
                 <div class="col-md-6">
                     <div class="mb-3">
                             <label asp-for="Quantity" class="form-label">9. Qty.<span class="error-star" style="color: red;">*</span></label>
-                            <input asp-for="Quantity" maxlength="5" class="form-control mandatory" placeholder="Enter Qty."
-                                   value="01" oninput="this.value = this.value.replace(/[^0-9]/g, '')" id="add_Quantity">
+                        <input asp-for="Quantity" maxlength="5" class="form-control mandatory" placeholder="Enter Qty."
+                               value="01" oninput="this.value = this.value.replace(/[^0-9]/g, '')" id="add_Quantity"
+                               onblur="formatQuantity(this)">
                     </div>
                 </div>
                 <div class="col-md-6">
@@ -172,11 +179,15 @@
                        
                     </div>
                 </div>
+                
                 <div class="col-md-6">
-                    <div class="mb-3">
-                        <label asp-for="Comment" class="form-label">Comment</label>
-                        <textarea asp-for="Comment" class="form-control" placeholder="Enter Comment" maxlength="100" rows="2"></textarea>
-                    </div>
+                    @if (showComment == 1)
+                    {
+                        <div class="mb-3">
+                            <label asp-for="Comment" class="form-label">Comment</label>
+                            <textarea asp-for="Comment" class="form-control" placeholder="Enter Comment" maxlength="100" rows="2"></textarea>
+                        </div>
+                    }
                 </div>
             </div>
                     
@@ -225,6 +236,25 @@
 
 @section Scripts {
     <script>
+
+        function formatQuantity(input) {
+            let value = input.value.trim();
+            if (value === '') return; // Do nothing if empty
+
+            const num = parseInt(value, 10);
+
+            // Check if it's a valid number within a reasonable range
+            if (!isNaN(num) && num > 0) {
+                // Use padStart(2, '0') which pads a string to a target length.
+                // '6'.padStart(2, '0') -> '06'
+                // '10'.padStart(2, '0') -> '10'
+                input.value = num.toString().padStart(2, '0');
+            } else {
+                // If user enters 0 or invalid text, reset to a default
+                input.value = '01';
+            }
+        }
+
         function showErrorMessage(message) {
             const alert = document.createElement('div');
             alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
