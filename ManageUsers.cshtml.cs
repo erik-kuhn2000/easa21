@@ -3,12 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
-using System;
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Threading.Tasks;
+
 
 namespace QApp.Pages
 {
@@ -16,8 +12,6 @@ namespace QApp.Pages
     public class ManagePersonnelModel : PageModel
     {
         // Model for a Personnel Entry
-
-        public string LoggedInUserTGI { get; private set; }
         public class PersonnelEntry
         {
             public string TGI { get; set; }
@@ -25,6 +19,8 @@ namespace QApp.Pages
             [Required(ErrorMessage = "Role is required.")]
             public int? Role { get; set; }
         }
+
+        public string LoggedInUserTGI { get; private set; }
 
         [BindProperty]
         public PersonnelEntry NewPersonnel { get; set; } = new PersonnelEntry();
@@ -39,7 +35,9 @@ namespace QApp.Pages
         public int TotalPages => (int)Math.Ceiling((double)TotalResults / PageSize);
 
         // Message Properties
+        [TempData]
         public string SuccessMessage { get; set; }
+        [TempData]
         public string ErrorMessage { get; set; }
 
         private readonly IConfiguration _configuration;
@@ -51,60 +49,48 @@ namespace QApp.Pages
             _logger = logger;
         }
 
-        public void OnGet()
+        public async Task OnGetAsync()
         {
-            if (TempData["SuccessMessage"] is string successMessage)
-            {
-                SuccessMessage = successMessage;
-            }
             LoadDropdowns();
-            LoadPersonnel();
+            await LoadPersonnelAsync();
             LoggedInUserTGI = User.Identity?.Name;
         }
 
-        public IActionResult OnPost(string handler)
+        public async Task<IActionResult> OnPostAsync(string handler)
         {
             if (handler == "add")
             {
-                return OnPostAddPersonnel();
+                return await OnPostAddPersonnelAsync();
             }
 
             LoadDropdowns();
-            LoadPersonnel();
+            await LoadPersonnelAsync();
             return Page();
         }
 
-        public IActionResult OnPostAddPersonnel()
+        public async Task<IActionResult> OnPostAddPersonnelAsync()
         {
-            // The framework has already validated the [Required] and [Range]
-            // attributes and populated ModelState before this code runs.
-
-            // We only need to add our custom database validation.
-            // Check if the TGI exists, but only if the rest of the model is valid so far.
-            if (ModelState.IsValid && PersonnelExists(NewPersonnel.TGI))
+            if (ModelState.IsValid && await PersonnelExistsAsync(NewPersonnel.TGI))
             {
                 ModelState.AddModelError("NewPersonnel.TGI", "This TGI already exists.");
             }
 
-            // Now, check the final state of the model.
             if (!ModelState.IsValid)
             {
-                // This will now work correctly with no duplicates.
                 var allErrors = ModelState.Values.SelectMany(v => v.Errors);
                 ErrorMessage = string.Join(" ", allErrors.Select(e => e.ErrorMessage));
 
                 LoadDropdowns();
-                LoadPersonnel();
+                await LoadPersonnelAsync();
                 return Page();
             }
 
             try
             {
-                if (AddPersonnel(NewPersonnel))
+                if (await AddPersonnelAsync(NewPersonnel))
                 {
-                    LogAction("Add", NewPersonnel);
-                    
-                    TempData["SuccessMessage"] = "User entry added successfully.";
+                    await LogActionAsync("Add", NewPersonnel);
+                    SuccessMessage = "User entry added successfully.";
                     return RedirectToPage();
                 }
                 else
@@ -119,11 +105,11 @@ namespace QApp.Pages
             }
 
             LoadDropdowns();
-            LoadPersonnel();
+            await LoadPersonnelAsync();
             return Page();
         }
 
-        public async Task<IActionResult> OnPostUpdatePersonnel(string tgi, string name, int role)
+        public async Task<IActionResult> OnPostUpdatePersonnelAsync(string tgi, string name, int role)
         {
             if (string.Equals(tgi, User.Identity?.Name, StringComparison.OrdinalIgnoreCase))
             {
@@ -131,6 +117,7 @@ namespace QApp.Pages
             }
             try
             {
+                // Validation
                 var errors = new List<string>();
                 if (string.IsNullOrWhiteSpace(name)) errors.Add("Name is required.");
                 if (role == 0) errors.Add("Role is required.");
@@ -140,7 +127,7 @@ namespace QApp.Pages
                     return new JsonResult(new { success = false, message = string.Join(" ", errors) });
                 }
 
-                var currentPersonnel = GetPersonnelDetails(tgi);
+                var currentPersonnel = await GetPersonnelDetailsAsync(tgi);
                 if (currentPersonnel == null)
                 {
                     return new JsonResult(new { success = false, message = "User not found." });
@@ -148,9 +135,9 @@ namespace QApp.Pages
 
                 var personnelToUpdate = new PersonnelEntry { TGI = tgi, Name = name, Role = role };
 
-                if (UpdatePersonnel(personnelToUpdate))
+                if (await UpdatePersonnelAsync(personnelToUpdate))
                 {
-                    LogAction("Update", personnelToUpdate, currentPersonnel);
+                    await LogActionAsync("Update", personnelToUpdate, currentPersonnel);
                     return new JsonResult(new { success = true, message = "User entry updated successfully." });
                 }
                 else
@@ -165,7 +152,7 @@ namespace QApp.Pages
             }
         }
 
-        public async Task<IActionResult> OnPostDeletePersonnel(string tgi)
+        public async Task<IActionResult> OnPostDeletePersonnelAsync(string tgi)
         {
             if (string.Equals(tgi, User.Identity?.Name, StringComparison.OrdinalIgnoreCase))
             {
@@ -178,15 +165,15 @@ namespace QApp.Pages
 
             try
             {
-                var personnelToDelete = GetPersonnelDetails(tgi);
+                var personnelToDelete = await GetPersonnelDetailsAsync(tgi);
                 if (personnelToDelete == null)
                 {
                     return new JsonResult(new { success = false, message = "User entry not found." });
                 }
 
-                if (DeletePersonnel(personnelToDelete))
+                if (await DeletePersonnelAsync(personnelToDelete))
                 {
-                    LogAction("Delete", personnelToDelete);
+                    await LogActionAsync("Delete", personnelToDelete);
                     return new JsonResult(new { success = true, message = "User entry deleted successfully." });
                 }
                 else
@@ -201,7 +188,7 @@ namespace QApp.Pages
             }
         }
 
-        public IActionResult OnGetPersonnelDetails(string tgi)
+        public async Task<IActionResult> OnGetPersonnelDetailsAsync(string tgi)
         {
             if (string.IsNullOrWhiteSpace(tgi))
             {
@@ -209,7 +196,7 @@ namespace QApp.Pages
             }
             try
             {
-                var personnel = GetPersonnelDetails(tgi);
+                var personnel = await GetPersonnelDetailsAsync(tgi);
                 if (personnel == null)
                 {
                     return new JsonResult(new { success = false, message = "User not found." });
@@ -232,17 +219,18 @@ namespace QApp.Pages
             };
         }
 
-        private void LoadPersonnel()
+        private async Task LoadPersonnelAsync()
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
+            PersonnelList.Clear();
             try
             {
                 using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
+                    await connection.OpenAsync();
                     using (var countCommand = new SqlCommand("SELECT COUNT(*) FROM Users", connection))
                     {
-                        TotalResults = (int)countCommand.ExecuteScalar();
+                        TotalResults = (int)await countCommand.ExecuteScalarAsync();
                     }
 
                     int offset = (PageNumber - 1) * PageSize;
@@ -253,9 +241,9 @@ namespace QApp.Pages
                     {
                         command.Parameters.AddWithValue("@Offset", offset);
                         command.Parameters.AddWithValue("@PageSize", PageSize);
-                        using (var reader = command.ExecuteReader())
+                        using (var reader = await command.ExecuteReaderAsync())
                         {
-                            while (reader.Read())
+                            while (await reader.ReadAsync())
                             {
                                 PersonnelList.Add(new PersonnelEntry
                                 {
@@ -275,83 +263,84 @@ namespace QApp.Pages
             }
         }
 
-        private bool PersonnelExists(string tgi)
+        private async Task<bool> PersonnelExistsAsync(string tgi)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             using (var connection = new SqlConnection(connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
                 var sql = "SELECT COUNT(*) FROM Users WHERE TGI = @TGI";
                 using (var command = new SqlCommand(sql, connection))
                 {
                     command.Parameters.AddWithValue("@TGI", tgi);
-                    return (int)command.ExecuteScalar() > 0;
+                    var result = await command.ExecuteScalarAsync();
+                    return (int)result > 0;
                 }
             }
         }
 
-        private bool AddPersonnel(PersonnelEntry personnel)
+        private async Task<bool> AddPersonnelAsync(PersonnelEntry personnel)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             using (var connection = new SqlConnection(connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
                 var sql = "INSERT INTO Users (TGI, Name, Role) VALUES (@TGI, @Name, @Role)";
                 using (var command = new SqlCommand(sql, connection))
                 {
                     command.Parameters.AddWithValue("@TGI", personnel.TGI);
                     command.Parameters.AddWithValue("@Name", personnel.Name);
                     command.Parameters.AddWithValue("@Role", personnel.Role);
-                    return command.ExecuteNonQuery() > 0;
+                    return await command.ExecuteNonQueryAsync() > 0;
                 }
             }
         }
 
-        private bool UpdatePersonnel(PersonnelEntry personnel)
+        private async Task<bool> UpdatePersonnelAsync(PersonnelEntry personnel)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             using (var connection = new SqlConnection(connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
                 var sql = "UPDATE Users SET Name = @Name, Role = @Role WHERE TGI = @TGI";
                 using (var command = new SqlCommand(sql, connection))
                 {
                     command.Parameters.AddWithValue("@Name", personnel.Name);
                     command.Parameters.AddWithValue("@Role", personnel.Role);
                     command.Parameters.AddWithValue("@TGI", personnel.TGI);
-                    return command.ExecuteNonQuery() > 0;
+                    return await command.ExecuteNonQueryAsync() > 0;
                 }
             }
         }
 
-        private bool DeletePersonnel(PersonnelEntry personnel)
+        private async Task<bool> DeletePersonnelAsync(PersonnelEntry personnel)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             using (var connection = new SqlConnection(connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
                 var sql = "DELETE FROM Users WHERE TGI = @TGI";
                 using (var command = new SqlCommand(sql, connection))
                 {
                     command.Parameters.AddWithValue("@TGI", personnel.TGI);
-                    return command.ExecuteNonQuery() > 0;
+                    return await command.ExecuteNonQueryAsync() > 0;
                 }
             }
         }
 
-        private PersonnelEntry GetPersonnelDetails(string tgi)
+        private async Task<PersonnelEntry> GetPersonnelDetailsAsync(string tgi)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             using (var connection = new SqlConnection(connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
                 var sql = "SELECT TGI, Name, Role FROM Users WHERE TGI = @TGI";
                 using (var command = new SqlCommand(sql, connection))
                 {
                     command.Parameters.AddWithValue("@TGI", tgi);
-                    using (var reader = command.ExecuteReader())
+                    using (var reader = await command.ExecuteReaderAsync())
                     {
-                        if (reader.Read())
+                        if (await reader.ReadAsync())
                         {
                             return new PersonnelEntry
                             {
@@ -366,42 +355,41 @@ namespace QApp.Pages
             return null;
         }
 
-        private void LogAction(string action, PersonnelEntry personnel, PersonnelEntry oldPersonnel = null)
+        private async Task LogActionAsync(string action, PersonnelEntry personnel, PersonnelEntry oldPersonnel = null)
         {
             try
             {
                 string connectionString = _configuration.GetConnectionString("SQLConnection");
                 using (var conn = new SqlConnection(connectionString))
                 {
-                    conn.Open();
+                    await conn.OpenAsync();
                     var logQuery = "INSERT INTO Log_Users (Action, Performed_By, Datetime, TGI, Name, Role) VALUES (@Action, @ID, @Time, @TGI, @Name, @Role)";
                     using (var cmd = new SqlCommand(logQuery, conn))
                     {
                         cmd.Parameters.AddWithValue("@Action", action);
                         cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
-                        cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
-                        
+                        cmd.Parameters.AddWithValue("@Time", DateTime.Now);
 
-                        if (action == "Add")
-                        {
-                            cmd.Parameters.AddWithValue("@Name", personnel.Name);
-                            cmd.Parameters.AddWithValue("@Role", personnel.Role);
-                            cmd.Parameters.AddWithValue("@TGI", personnel.TGI);
-                        }
-                        else if (action == "Delete")
-                        {
-                            cmd.Parameters.AddWithValue("@Name", (object)DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Role", (object)DBNull.Value);
-                            cmd.Parameters.AddWithValue("@TGI", (object)DBNull.Value);
-                        }
-                        else if (action == "Update" && oldPersonnel != null)
+                        // Simplified logging logic
+                        cmd.Parameters.AddWithValue("@TGI", personnel.TGI);
+
+                        if (action == "Update" && oldPersonnel != null)
                         {
                             cmd.Parameters.AddWithValue("@Name", oldPersonnel.Name != personnel.Name ? personnel.Name : (object)DBNull.Value);
                             cmd.Parameters.AddWithValue("@Role", oldPersonnel.Role != personnel.Role ? personnel.Role : (object)DBNull.Value);
-                            cmd.Parameters.AddWithValue("@TGI", (object)DBNull.Value);
+                        }
+                        else if (action == "Add")
+                        {
+                            cmd.Parameters.AddWithValue("@Name", personnel.Name);
+                            cmd.Parameters.AddWithValue("@Role", personnel.Role);
+                        }
+                        else // For Delete, log nulls for name/role
+                        {
+                            cmd.Parameters.AddWithValue("@Name", (object)DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Role", (object)DBNull.Value);
                         }
 
-                        cmd.ExecuteNonQuery();
+                        await cmd.ExecuteNonQueryAsync();
                     }
                 }
             }

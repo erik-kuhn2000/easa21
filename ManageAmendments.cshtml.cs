@@ -1,15 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using QApp.Pages.Authorization;
-using System;
-using System.Collections.Generic;
 using System.Data.SqlClient;
-using System.Linq;
-using System.Threading.Tasks;
-using static QApp.Pages.ManagePrefixesModel;
+
 
 [Authorize(Policy = "AdminOnly")]
 public class ManageAmendmentsModel : PageModel

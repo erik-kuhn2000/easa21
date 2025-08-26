@@ -3,49 +3,48 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.Data.SqlClient;
 
-
 [Authorize(Policy = "AdminOnly")]
-public class ManageStatusesModel : PageModel
+public class ManageStatesModel : PageModel
 {
     private readonly IConfiguration _configuration;
-    private readonly ILogger<ManageStatusesModel> _logger;
+    private readonly ILogger<ManageStatesModel> _logger;
 
-    public ManageStatusesModel(IConfiguration configuration, ILogger<ManageStatusesModel> logger)
+    public ManageStatesModel(IConfiguration configuration, ILogger<ManageStatesModel> logger)
     {
         _configuration = configuration;
         _logger = logger;
     }
 
-    // This property will hold the list of statuses for display.
-    public List<string> Statuses { get; set; } = new List<string>();
+    // This property will hold the list of states for display.
+    public List<string> States { get; set; } = new List<string>();
 
     // This property binds the input from the "Add" form.
     [BindProperty]
-    public string NewStatus { get; set; }
+    public string NewState { get; set; }
 
-    // This property binds the array of selected statuses for deletion.
+    // This property binds the array of selected states for deletion.
     [BindProperty]
-    public List<string> SelectedStatuses { get; set; } = new List<string>();
+    public List<string> SelectedStates { get; set; } = new List<string>();
 
     // Runs when the page is first requested to populate the initial list.
     public void OnGet()
     {
-        LoadStatuses();
+        LoadStates();
     }
 
-    // AJAX Handler: Returns the current list of statuses as JSON.
+    // AJAX Handler: Returns the current list of states as JSON.
     public IActionResult OnGetList()
     {
-        LoadStatuses();
-        return new JsonResult(Statuses);
+        LoadStates();
+        return new JsonResult(States);
     }
 
-    // AJAX Handler: Adds a new status.
+    // AJAX Handler: Adds a new state.
     public async Task<IActionResult> OnPostAddAsync()
     {
-        if (string.IsNullOrWhiteSpace(NewStatus))
+        if (string.IsNullOrWhiteSpace(NewState))
         {
-            return new JsonResult(new { success = false, message = "Status cannot be empty." });
+            return new JsonResult(new { success = false, message = "State cannot be empty." });
         }
 
         try
@@ -57,22 +56,22 @@ public class ManageStatusesModel : PageModel
                 await connection.OpenAsync();
                 await using (var transaction = connection.BeginTransaction())
                 {
-                    // Check if status already exists to prevent duplicates
-                    string checkQuery = "SELECT COUNT(*) FROM Statuses WHERE Status = @Status";
+                    // Check if state already exists to prevent duplicates
+                    string checkQuery = "SELECT COUNT(*) FROM States WHERE State = @State";
                     await using (var checkCommand = new SqlCommand(checkQuery, connection, transaction))
                     {
-                        checkCommand.Parameters.AddWithValue("@Status", NewStatus.Trim());
+                        checkCommand.Parameters.AddWithValue("@State", NewState.Trim());
                         if ((int)await checkCommand.ExecuteScalarAsync() > 0)
                         {
-                            return new JsonResult(new { success = false, message = "Status already exists." });
+                            return new JsonResult(new { success = false, message = "State already exists." });
                         }
                     }
 
-                    // Insert the new status
-                    string insertQuery = "INSERT INTO Statuses (Status) VALUES (@Status)";
+                    // Insert the new state
+                    string insertQuery = "INSERT INTO States (State) VALUES (@State)";
                     await using (var command = new SqlCommand(insertQuery, connection, transaction))
                     {
-                        command.Parameters.AddWithValue("@Status", NewStatus.Trim());
+                        command.Parameters.AddWithValue("@State", NewState.Trim());
                         await command.ExecuteNonQueryAsync();
                     }
 
@@ -82,29 +81,29 @@ public class ManageStatusesModel : PageModel
             }
 
             // Step 2: After the main operation is successful, log the action.
-            await LogActionAsync("Add", NewStatus);
+            await LogActionAsync("Add", NewState);
 
-            _logger.LogInformation("Successfully added new status: {Status}", NewStatus);
+            _logger.LogInformation("Successfully added new state: {State}", NewState);
             return new JsonResult(new
             {
                 success = true,
-                message = "Successfully added status."
+                message = "Successfully added state."
             });
         }
         catch (Exception ex)
         {
             // This will catch any errors from the main transaction (check/insert).
-            _logger.LogError(ex, "Error adding status: {Status}", NewStatus);
-            return new JsonResult(new { success = false, message = "An error occurred while adding the status." });
+            _logger.LogError(ex, "Error adding state: {State}", NewState);
+            return new JsonResult(new { success = false, message = "An error occurred while adding the state." });
         }
     }
 
-    // AJAX Handler: Deletes selected statuses.
+    // AJAX Handler: Deletes selected states.
     public async Task<IActionResult> OnPostDeleteAsync()
     {
-        if (SelectedStatuses == null || !SelectedStatuses.Any())
+        if (SelectedStates == null || !SelectedStates.Any())
         {
-            return new JsonResult(new { success = false, message = "No statuses selected for deletion." });
+            return new JsonResult(new { success = false, message = "No states selected for deletion." });
         }
 
         string connectionString = _configuration.GetConnectionString("SQLConnection");
@@ -114,22 +113,22 @@ public class ManageStatusesModel : PageModel
             {
                 await connection.OpenAsync();
 
-                // Iterate through each selected status to delete it and log the action
-                foreach (var status in SelectedStatuses)
+                // Iterate through each selected state to delete it and log the action
+                foreach (var state in SelectedStates)
                 {
                     // Use a transaction to ensure the delete and log operations succeed or fail together.
                     await using (var transaction = connection.BeginTransaction())
                     {
                         // 1. Delete the item
-                        string query = "DELETE FROM Statuses WHERE Status = @Status";
+                        string query = "DELETE FROM States WHERE State = @State";
                         await using (var command = new SqlCommand(query, connection, transaction))
                         {
-                            command.Parameters.AddWithValue("@Status", status);
+                            command.Parameters.AddWithValue("@State", state);
                             await command.ExecuteNonQueryAsync();
                         }
 
                         // 2. Log the deletion action
-                        await LogActionAsync("Delete", status);
+                        await LogActionAsync("Delete", state);
 
                         // If both operations were successful, commit the transaction
                         await transaction.CommitAsync();
@@ -137,37 +136,38 @@ public class ManageStatusesModel : PageModel
                 }
             }
 
-            _logger.LogInformation($"Deleted {SelectedStatuses.Count} statuses");
+            _logger.LogInformation($"Deleted {SelectedStates.Count} states");
             return new JsonResult(new
             {
                 success = true,
-                message = $"Successfully deleted {SelectedStatuses.Count} status(es)."
+                message = $"Successfully deleted {SelectedStates.Count} state(s)."
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting statuses");
-            return new JsonResult(new { success = false, message = "An error occurred while deleting statuses." });
+            _logger.LogError(ex, "Error deleting states");
+            return new JsonResult(new { success = false, message = "An error occurred while deleting states." });
         }
     }
-    // Private helper method to load status data from the database.
-    private void LoadStatuses()
+
+    // Private helper method to load state data from the database.
+    private void LoadStates()
     {
         try
         {
-            Statuses.Clear();
+            States.Clear();
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             using (var connection = new SqlConnection(connectionString))
             {
                 connection.Open();
-                string query = "SELECT Status FROM Statuses ORDER BY Status";
+                string query = "SELECT State FROM States ORDER BY State";
                 using (var command = new SqlCommand(query, connection))
                 {
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
                         {
-                            Statuses.Add(reader["Status"].ToString());
+                            States.Add(reader["State"].ToString());
                         }
                     }
                 }
@@ -175,9 +175,9 @@ public class ManageStatusesModel : PageModel
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading statuses");
-            Statuses = new List<string>();
-            ModelState.AddModelError(string.Empty, "Could not load statuses from the database.");
+            _logger.LogError(ex, "Error loading states");
+            States = new List<string>();
+            ModelState.AddModelError(string.Empty, "Could not load states from the database.");
         }
     }
 
@@ -189,13 +189,13 @@ public class ManageStatusesModel : PageModel
             await using (var connection = new SqlConnection(connectionString))
             {
                 await connection.OpenAsync();
-                var logQuery = "INSERT INTO Log_Statuses (Action, Performed_By, Datetime, Status) VALUES (@Action, @ID, @Time, @Status)";
+                var logQuery = "INSERT INTO Log_States (Action, Performed_By, Datetime, State) VALUES (@Action, @ID, @Time, @State)";
                 await using (var cmd = new SqlCommand(logQuery, connection))
                 {
                     cmd.Parameters.AddWithValue("@Action", action);
                     cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
-                    cmd.Parameters.AddWithValue("@Status", name.Trim());
+                    cmd.Parameters.AddWithValue("@State", name.Trim());
                     await cmd.ExecuteNonQueryAsync();
                 }
             }

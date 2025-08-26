@@ -5,106 +5,102 @@ using System.Data.SqlClient;
 
 
 [Authorize(Policy = "AdminOnly")]
-public class ManageStatusesModel : PageModel
+public class ManageApprovedDesignIndicatorsModel : PageModel
 {
     private readonly IConfiguration _configuration;
-    private readonly ILogger<ManageStatusesModel> _logger;
+    private readonly ILogger<ManageApprovedDesignIndicatorsModel> _logger;
 
-    public ManageStatusesModel(IConfiguration configuration, ILogger<ManageStatusesModel> logger)
+    public ManageApprovedDesignIndicatorsModel(IConfiguration configuration, ILogger<ManageApprovedDesignIndicatorsModel> logger)
     {
         _configuration = configuration;
         _logger = logger;
     }
 
-    // This property will hold the list of statuses for display.
-    public List<string> Statuses { get; set; } = new List<string>();
+    // This property will hold the list of indicators for display.
+    public List<string> ApprovedDesignIndicators { get; set; } = new List<string>();
 
     // This property binds the input from the "Add" form.
     [BindProperty]
-    public string NewStatus { get; set; }
+    public string NewApprovedDesignIndicator { get; set; }
 
-    // This property binds the array of selected statuses for deletion.
+    // This property binds the array of selected indicators for deletion.
     [BindProperty]
-    public List<string> SelectedStatuses { get; set; } = new List<string>();
+    public List<string> SelectedApprovedDesignIndicators { get; set; } = new List<string>();
 
     // Runs when the page is first requested to populate the initial list.
     public void OnGet()
     {
-        LoadStatuses();
+        LoadApprovedDesignIndicators();
     }
 
-    // AJAX Handler: Returns the current list of statuses as JSON.
+    // AJAX Handler: Returns the current list of indicators as JSON.
     public IActionResult OnGetList()
     {
-        LoadStatuses();
-        return new JsonResult(Statuses);
+        LoadApprovedDesignIndicators();
+        return new JsonResult(ApprovedDesignIndicators);
     }
 
-    // AJAX Handler: Adds a new status.
+    // AJAX Handler: Adds a new approved design indicator.
     public async Task<IActionResult> OnPostAddAsync()
     {
-        if (string.IsNullOrWhiteSpace(NewStatus))
+        if (string.IsNullOrWhiteSpace(NewApprovedDesignIndicator))
         {
-            return new JsonResult(new { success = false, message = "Status cannot be empty." });
+            return new JsonResult(new { success = false, message = "Approved Design Indicator cannot be empty." });
         }
 
         try
         {
-            // Step 1: Perform the main database operation within a transaction for atomicity.
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             await using (var connection = new SqlConnection(connectionString))
             {
                 await connection.OpenAsync();
                 await using (var transaction = connection.BeginTransaction())
                 {
-                    // Check if status already exists to prevent duplicates
-                    string checkQuery = "SELECT COUNT(*) FROM Statuses WHERE Status = @Status";
+                    // Check if indicator already exists to prevent duplicates
+                    string checkQuery = "SELECT COUNT(*) FROM ApprovedDesignIndicators WHERE ApprovedDesignIndicator = @ApprovedDesignIndicator";
                     await using (var checkCommand = new SqlCommand(checkQuery, connection, transaction))
                     {
-                        checkCommand.Parameters.AddWithValue("@Status", NewStatus.Trim());
+                        checkCommand.Parameters.AddWithValue("@ApprovedDesignIndicator", NewApprovedDesignIndicator.Trim());
                         if ((int)await checkCommand.ExecuteScalarAsync() > 0)
                         {
-                            return new JsonResult(new { success = false, message = "Status already exists." });
+                            return new JsonResult(new { success = false, message = "Approved Design Indicator already exists." });
                         }
                     }
 
-                    // Insert the new status
-                    string insertQuery = "INSERT INTO Statuses (Status) VALUES (@Status)";
+                    // Insert the new indicator
+                    string insertQuery = "INSERT INTO ApprovedDesignIndicators (ApprovedDesignIndicator) VALUES (@ApprovedDesignIndicator)";
                     await using (var command = new SqlCommand(insertQuery, connection, transaction))
                     {
-                        command.Parameters.AddWithValue("@Status", NewStatus.Trim());
+                        command.Parameters.AddWithValue("@ApprovedDesignIndicator", NewApprovedDesignIndicator.Trim());
                         await command.ExecuteNonQueryAsync();
                     }
 
-                    // Commit the transaction if the check and insert operations are successful.
                     await transaction.CommitAsync();
                 }
             }
 
-            // Step 2: After the main operation is successful, log the action.
-            await LogActionAsync("Add", NewStatus);
+            await LogActionAsync("Add", NewApprovedDesignIndicator);
 
-            _logger.LogInformation("Successfully added new status: {Status}", NewStatus);
+            _logger.LogInformation("Successfully added new Approved Design Indicator: {Indicator}", NewApprovedDesignIndicator);
             return new JsonResult(new
             {
                 success = true,
-                message = "Successfully added status."
+                message = "Successfully added Approved Design Indicator."
             });
         }
         catch (Exception ex)
         {
-            // This will catch any errors from the main transaction (check/insert).
-            _logger.LogError(ex, "Error adding status: {Status}", NewStatus);
-            return new JsonResult(new { success = false, message = "An error occurred while adding the status." });
+            _logger.LogError(ex, "Error adding Approved Design Indicator: {Indicator}", NewApprovedDesignIndicator);
+            return new JsonResult(new { success = false, message = "An error occurred while adding the Approved Design Indicator." });
         }
     }
 
-    // AJAX Handler: Deletes selected statuses.
+    // AJAX Handler: Deletes selected approved design indicators.
     public async Task<IActionResult> OnPostDeleteAsync()
     {
-        if (SelectedStatuses == null || !SelectedStatuses.Any())
+        if (SelectedApprovedDesignIndicators == null || !SelectedApprovedDesignIndicators.Any())
         {
-            return new JsonResult(new { success = false, message = "No statuses selected for deletion." });
+            return new JsonResult(new { success = false, message = "No Approved Design Indicators selected for deletion." });
         }
 
         string connectionString = _configuration.GetConnectionString("SQLConnection");
@@ -114,60 +110,58 @@ public class ManageStatusesModel : PageModel
             {
                 await connection.OpenAsync();
 
-                // Iterate through each selected status to delete it and log the action
-                foreach (var status in SelectedStatuses)
+                foreach (var indicator in SelectedApprovedDesignIndicators)
                 {
-                    // Use a transaction to ensure the delete and log operations succeed or fail together.
                     await using (var transaction = connection.BeginTransaction())
                     {
                         // 1. Delete the item
-                        string query = "DELETE FROM Statuses WHERE Status = @Status";
+                        string query = "DELETE FROM ApprovedDesignIndicators WHERE ApprovedDesignIndicator = @ApprovedDesignIndicator";
                         await using (var command = new SqlCommand(query, connection, transaction))
                         {
-                            command.Parameters.AddWithValue("@Status", status);
+                            command.Parameters.AddWithValue("@ApprovedDesignIndicator", indicator);
                             await command.ExecuteNonQueryAsync();
                         }
 
                         // 2. Log the deletion action
-                        await LogActionAsync("Delete", status);
+                        await LogActionAsync("Delete", indicator);
 
-                        // If both operations were successful, commit the transaction
                         await transaction.CommitAsync();
                     }
                 }
             }
 
-            _logger.LogInformation($"Deleted {SelectedStatuses.Count} statuses");
+            _logger.LogInformation($"Deleted {SelectedApprovedDesignIndicators.Count} approved design indicators");
             return new JsonResult(new
             {
                 success = true,
-                message = $"Successfully deleted {SelectedStatuses.Count} status(es)."
+                message = $"Successfully deleted {SelectedApprovedDesignIndicators.Count} Approved Design Indicator(s)."
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting statuses");
-            return new JsonResult(new { success = false, message = "An error occurred while deleting statuses." });
+            _logger.LogError(ex, "Error deleting Approved Design Indicators");
+            return new JsonResult(new { success = false, message = "An error occurred while deleting the Approved Design Indicators." });
         }
     }
-    // Private helper method to load status data from the database.
-    private void LoadStatuses()
+
+    // Private helper method to load data from the database.
+    private void LoadApprovedDesignIndicators()
     {
         try
         {
-            Statuses.Clear();
+            ApprovedDesignIndicators.Clear();
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             using (var connection = new SqlConnection(connectionString))
             {
                 connection.Open();
-                string query = "SELECT Status FROM Statuses ORDER BY Status";
+                string query = "SELECT ApprovedDesignIndicator FROM ApprovedDesignIndicators ORDER BY ApprovedDesignIndicator";
                 using (var command = new SqlCommand(query, connection))
                 {
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
                         {
-                            Statuses.Add(reader["Status"].ToString());
+                            ApprovedDesignIndicators.Add(reader["ApprovedDesignIndicator"].ToString());
                         }
                     }
                 }
@@ -175,9 +169,9 @@ public class ManageStatusesModel : PageModel
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading statuses");
-            Statuses = new List<string>();
-            ModelState.AddModelError(string.Empty, "Could not load statuses from the database.");
+            _logger.LogError(ex, "Error loading Approved Design Indicators");
+            ApprovedDesignIndicators = new List<string>();
+            ModelState.AddModelError(string.Empty, "Could not load Approved Design Indicators from the database.");
         }
     }
 
@@ -189,20 +183,19 @@ public class ManageStatusesModel : PageModel
             await using (var connection = new SqlConnection(connectionString))
             {
                 await connection.OpenAsync();
-                var logQuery = "INSERT INTO Log_Statuses (Action, Performed_By, Datetime, Status) VALUES (@Action, @ID, @Time, @Status)";
+                var logQuery = "INSERT INTO Log_ApprovedDesignIndicators (Action, Performed_By, Datetime, ApprovedDesignIndicator) VALUES (@Action, @ID, @Time, @ApprovedDesignIndicator)";
                 await using (var cmd = new SqlCommand(logQuery, connection))
                 {
                     cmd.Parameters.AddWithValue("@Action", action);
                     cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
-                    cmd.Parameters.AddWithValue("@Status", name.Trim());
+                    cmd.Parameters.AddWithValue("@ApprovedDesignIndicator", name.Trim());
                     await cmd.ExecuteNonQueryAsync();
                 }
             }
         }
         catch (Exception ex)
         {
-            // Log that the logging action itself failed
             _logger.LogError(ex, "Failed to log admin action '{Action}' for item '{Name}'", action, name);
         }
     }

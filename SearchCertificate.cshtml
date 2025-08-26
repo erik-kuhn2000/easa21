@@ -29,7 +29,7 @@
 
                 <div class="col-md-3">
                     <label asp-for="SearchCriteria.CertNo" class="form-label">3. Certificate No.</label>
-                    <input asp-for="SearchCriteria.CertNo" class="form-control" placeholder="All">
+                    <input asp-for="SearchCriteria.CertNo" class="form-control" placeholder="All" maxlength="25">
                 </div>
                 <div class="col-md-3">
                     <label asp-for="SearchCriteria.Edition" class="form-label">3. Edition of Form Tracking No.</label>
@@ -49,7 +49,7 @@
                 <div class="col-md-3">
 
                     <label asp-for="SearchCriteria.SerialNo" class="form-label">10. Serial No.</label>
-                    <input asp-for="SearchCriteria.SerialNo" class="form-control" placeholder="All">
+                    <input asp-for="SearchCriteria.SerialNo" class="form-control" placeholder="All" maxlength="25">
 
 
 
@@ -1008,13 +1008,13 @@
                             <div class="col-md-6">
                             <div class="mb-3">
                                <label class="form-label">12. Remarks (Line 1)</label>
-                               <textarea id="update_Remarks1" class="form-control" rows="2" maxlength="100" placeholder="Enter Remarks (Line 1)">${details.remarks1 || ''}</textarea>
+                               <textarea id="update_Remarks1" class="form-control" rows="2" maxlength="150" placeholder="Enter Remarks (Line 1)">${details.remarks1 || ''}</textarea>
                            </div>
                             </div>
                            <div class="col-md-6">
                             <div class="mb-3">
                                <label class="form-label">12. Remarks (Line 2)</label>
-                               <textarea id="update_Remarks2" class="form-control" rows="2" maxlength="100" placeholder="Enter Remarks (Line 2)">${details.remarks2 || ''}</textarea>
+                               <textarea id="update_Remarks2" class="form-control" rows="2" maxlength="150" placeholder="Enter Remarks (Line 2)">${details.remarks2 || ''}</textarea>
                                </div>
                            </div>
                        </div>
@@ -1023,13 +1023,13 @@
                             <div class="col-md-6">
                            <div class="mb-3">
                                <label class="form-label">12. Remarks (Line 3)</label>
-                               <textarea id="update_Remarks3" class="form-control" rows="2" maxlength="100" placeholder="Enter Remarks (Line 3)">${details.remarks3 || ''}</textarea>
+                               <textarea id="update_Remarks3" class="form-control" rows="2" maxlength="150" placeholder="Enter Remarks (Line 3)">${details.remarks3 || ''}</textarea>
                                </div>
                            </div>
                            <div class="col-md-6">
                               <div class="mb-3">
                                <label class="form-label">12. Remarks (Line 4)</label>
-                               <textarea id="update_Remarks4" class="form-control" rows="2" maxlength="100" placeholder="Enter Remarks (Line 4)">${details.remarks4 || ''}</textarea>
+                               <textarea id="update_Remarks4" class="form-control" rows="2" maxlength="150" placeholder="Enter Remarks (Line 4)">${details.remarks4 || ''}</textarea>
                                </div>
                            </div>
                        </div>
@@ -1373,7 +1373,15 @@
                         a.href = url;
 
                         const editionSuffix = edition ? `_Ed${edition}` : '';
-                        a.download = `Certificate_${certNo}${editionSuffix}_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.pdf`;
+                            const today = new Date();
+    const day = String(today.getDate()).padStart(2, '0');
+    const month = today.toLocaleString('en-US', { month: 'short' });
+    const year = today.getFullYear();
+
+    const formattedDate = `${day}${month}${year}`; // e.g., 26Aug2025
+
+    a.download = `Certificate_${certNo}${editionSuffix}_${formattedDate}.pdf`;
+                        
 
                         document.body.appendChild(a);
                         a.click();

@@ -1,13 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Data.SqlClient;
 using ClosedXML.Excel;
-using System.IO;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System;
-using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 
 
@@ -28,10 +22,8 @@ namespace QApp.Pages // <-- IMPORTANT: Change to your project's namespace
             { "Log_Prefixes", "Prefix Management Log" },
             { "Log_Amendments", "Amendment Management Log" },
             { "Log_Statuses", "Status Management Log" },
-            { "Log_ApprovedDesignIndicators", "Approved Design Indicator Management Log" },
-            { "Log_States", "State Management Log" },
             { "Log_AuthorisationNumber", "Authorisation Number Management Log" },
-            { "Log_Users", "User Managementn Log" },
+            { "Log_Users", "User Management Log" },
             { "Log_TemplateUploads", "Template Upload Log" }
         };
 
@@ -109,7 +101,7 @@ namespace QApp.Pages // <-- IMPORTANT: Change to your project's namespace
                     return File(
                         content,
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        $"{tableName}_{timestamp}.xlsx");
+                        $"{tableName}_{DateTime.Now:ddMMMyyyy}.xlsx");
                 }
             }
         }

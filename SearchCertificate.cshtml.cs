@@ -4,16 +4,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Caching.Memory;
 using PdfSharp.Fonts;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.AcroForms;
 using PdfSharp.Pdf.IO;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-
 
 namespace QApp.Pages
 {
@@ -150,13 +145,15 @@ namespace QApp.Pages
         private readonly ILogger<SearchModel> _logger;
         private readonly IAuthorizationService _authorizationService;
         private readonly IWebHostEnvironment _hostingEnvironment;
+        private readonly IMemoryCache _cache;
 
-        public SearchModel(IConfiguration configuration, ILogger<SearchModel> logger, IAuthorizationService authorizationService, IWebHostEnvironment hostingEnvironment)
+        public SearchModel(IConfiguration configuration, ILogger<SearchModel> logger, IAuthorizationService authorizationService, IWebHostEnvironment hostingEnvironment, IMemoryCache memoryCache)
         {
             _configuration = configuration;
             _logger = logger;
             _authorizationService = authorizationService;
             _hostingEnvironment = hostingEnvironment;
+            _cache = memoryCache;
 
             string fontPath = Path.Combine(_hostingEnvironment.WebRootPath, "Fonts");
             FontResolver.Initialize(fontPath);
@@ -167,7 +164,7 @@ namespace QApp.Pages
         public async Task<IActionResult> OnPostPrintCertificate(string certNo, string edition = null)
         {
             // Step 1: Get the certificate's original details for logging
-            var originalDetails = GetCertificateDetails(certNo, edition);
+            var originalDetails = await GetCertificateDetailsAsync(certNo, edition);
             if (originalDetails == null)
             {
                 return NotFound("Certificate not found.");
@@ -177,7 +174,7 @@ namespace QApp.Pages
             bool stateChanged = false;
             if (string.Equals(originalDetails.State, "Valid", StringComparison.OrdinalIgnoreCase))
             {
-                var stateUpdateSuccess = UpdateCertificateState(certNo, "Printed", edition);
+                var stateUpdateSuccess = await UpdateCertificateStateAsync(certNo, "Printed", edition);
                 if (stateUpdateSuccess)
                 {
                     stateChanged = true;
@@ -187,19 +184,20 @@ namespace QApp.Pages
             }
 
             // Step 3: Log the print action (regardless of state change)
-            LogPrintAction(certNo, edition, stateChanged);
+            await LogPrintActionAsync(certNo, edition, stateChanged);
 
             // Step 4: Generate the PDF and return it
-            byte[] pdfBytes = GeneratePdfCertificate(originalDetails);
+            byte[] pdfBytes = await GeneratePdfCertificateAsync(originalDetails);
 
             return File(
                 pdfBytes,
                 "application/pdf",
-                $"Certificate_{certNo}_Ed{edition}_{DateTime.Now:ddMMMyyyy_hhmmss}.pdf"
+                $"Certificate_{certNo}_Ed{edition}_{DateTime.Now:ddMMMyyyy}.pdf"
+                
             );
         }
 
-        private string GetCurrentUserSignatoryName()
+        private async Task<string> GetCurrentUserSignatoryNameAsync()
         {
             var userId = User.Identity?.Name;
             if (string.IsNullOrEmpty(userId))
@@ -208,19 +206,20 @@ namespace QApp.Pages
             }
 
             string connectionString = _configuration.GetConnectionString("SQLConnection");
-            using (var conn = new SqlConnection(connectionString))
+            await using (var conn = new SqlConnection(connectionString))
             {
-                conn.Open();
+                await conn.OpenAsync();
                 string query = "SELECT Name FROM Users WHERE TGI = @UserId AND Role = @SignatoryRole";
-                using (var cmd = new SqlCommand(query, conn))
+                await using (var cmd = new SqlCommand(query, conn))
                 {
                     cmd.Parameters.AddWithValue("@UserId", userId);
-                    cmd.Parameters.AddWithValue("@SignatoryRole", 2); // Assuming 2 is the Signatory Role ID
-                    return cmd.ExecuteScalar()?.ToString();
+                    cmd.Parameters.AddWithValue("@SignatoryRole", 2);
+                    var result = await cmd.ExecuteScalarAsync();
+                    return result?.ToString();
                 }
             }
         }
-        private byte[] GeneratePdfCertificate(CertificateDetails details)
+        private async Task<byte[]> GeneratePdfCertificateAsync(CertificateDetails details)
         {
             string relativePath = _configuration["FilePaths:TemplatePath"];
             string webRootPath = _hostingEnvironment.WebRootPath;
@@ -228,79 +227,78 @@ namespace QApp.Pages
 
             if (!System.IO.File.Exists(templatePath))
             {
-                throw new FileNotFoundException("PDF template not found at the specified path.", templatePath);
+                throw new FileNotFoundException("PDF template not found.", templatePath);
             }
 
-            PdfDocument document = PdfReader.Open(templatePath, PdfDocumentOpenMode.Modify);
-
-            if (document.AcroForm != null)
+            // Asynchronously read the file into a byte array first
+            byte[] templateBytes = await System.IO.File.ReadAllBytesAsync(templatePath);
+            using (var templateStream = new MemoryStream(templateBytes))
             {
-                var form = document.AcroForm;
+                PdfDocument document = PdfReader.Open(templateStream, PdfDocumentOpenMode.Modify);
 
-                string formattedDate = string.Empty;
-                if (!string.IsNullOrEmpty(details.Date) && DateTime.TryParse(details.Date, out DateTime parsedDate))
+                if (document.AcroForm != null)
                 {
-                    formattedDate = parsedDate.ToString("dd MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
-                }
-
-                SetFormField(form, "remarks1", details.Remarks1, "Arial", 10);
-                SetFormField(form, "remarks2", details.Remarks2, "Arial", 10);
-                SetFormField(form, "remarks3", details.Remarks3, "Arial", 10);
-                SetFormField(form, "remarks4", details.Remarks4, "Arial", 10);
-                SetFormField(form, "items", details.Item, "Arial", 10);
-
-                SetFormField(form, "approvalno", details.Authorisation, "Arial", 10);
-                SetFormField(form, "quantity", details.Quantity, "Arial", 10);
-                SetFormField(form, "serialno", details.SerialNo, "Arial", 10);
-                SetFormField(form, "name", details.Signatory, "Arial", 10);
-                SetFormField(form, "date", formattedDate, "Arial", 10);
-                SetFormField(form, "partno", details.ProductNo, "Arial", 10);
-                SetFormField(form, "trackingnumber", details.CertNo + "-2-" + details.Edition, "Arial", 10);
-                SetFormField(form, "status", details.Status, "Arial", 10);
-                SetFormField(form, "description", details.ProductDescription, "Arial", 10);
-
-
-                if (details.Amendment == ".") { SetFormField(form, "amendment", "", "Arial", 10); }
-                else
-                { SetFormField(form, "amendment", details.Amendment, "Arial", 10); }
-
-                if (details.Approved == "Approved Design Data") { SetFormField(form, "approved", "X", "Arial", 10); }
-                else { SetFormField(form, "notapproved", "X", "Arial", 10); }
-
-                if (details.Serialization == "Yes") { SetFormField(form, "workorder", details.ProductNo + "-" + details.SerialNo, "Arial", 10); }
-                else { SetFormField(form, "workorder", details.ProductNo, "Arial", 10); }
-
-
-
-
-
-                if (form.Elements.ContainsKey("/NeedAppearances"))
-                {
-                    form.Elements["/NeedAppearances"] = new PdfBoolean(true);
-                }
-                else
-                {
-                    form.Elements.Add("/NeedAppearances", new PdfBoolean(true));
-                }
-
-                foreach (var fieldName in form.Fields.Names)
-                {
-                    var field = form.Fields[fieldName];
-                    if (field != null)
+                    // PDF manipulation logic remains the same (it's in-memory)
+                    var form = document.AcroForm;
+                    // ... (SetFormField calls as before) ...
+                    string formattedDate = string.Empty;
+                    if (!string.IsNullOrEmpty(details.Date) && DateTime.TryParse(details.Date, out DateTime parsedDate))
                     {
-                        field.ReadOnly = true;
+                        formattedDate = parsedDate.ToString("dd MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                    }
+
+                    SetFormField(form, "remarks1", details.Remarks1, "Arial", 10);
+                    SetFormField(form, "remarks2", details.Remarks2, "Arial", 10);
+                    SetFormField(form, "remarks3", details.Remarks3, "Arial", 10);
+                    SetFormField(form, "remarks4", details.Remarks4, "Arial", 10);
+                    SetFormField(form, "items", details.Item, "Arial", 10);
+                    SetFormField(form, "approvalno", details.Authorisation, "Arial", 10);
+                    SetFormField(form, "quantity", details.Quantity, "Arial", 10);
+                    SetFormField(form, "serialno", details.SerialNo, "Arial", 10);
+                    SetFormField(form, "name", details.Signatory, "Arial", 10);
+                    SetFormField(form, "date", formattedDate, "Arial", 10);
+                    SetFormField(form, "partno", details.ProductNo, "Arial", 10);
+                    SetFormField(form, "trackingnumber", details.CertNo + "-2-" + details.Edition, "Arial", 10);
+                    SetFormField(form, "status", details.Status, "Arial", 10);
+                    SetFormField(form, "description", details.ProductDescription, "Arial", 10);
+
+                    if (details.Amendment == ".") { SetFormField(form, "amendment", "", "Arial", 10); }
+                    else { SetFormField(form, "amendment", details.Amendment, "Arial", 10); }
+
+                    if (details.Approved == "Approved Design Data") { SetFormField(form, "approved", "X", "Arial", 10); }
+                    else { SetFormField(form, "notapproved", "X", "Arial", 10); }
+
+                    if (details.Serialization == "Yes") { SetFormField(form, "workorder", details.ProductNo + "-" + details.SerialNo, "Arial", 10); }
+                    else { SetFormField(form, "workorder", details.ProductNo, "Arial", 10); }
+
+                    if (form.Elements.ContainsKey("/NeedAppearances"))
+                    {
+                        form.Elements["/NeedAppearances"] = new PdfBoolean(true);
+                    }
+                    else
+                    {
+                        form.Elements.Add("/NeedAppearances", new PdfBoolean(true));
+                    }
+
+                    foreach (var fieldName in form.Fields.Names)
+                    {
+                        var field = form.Fields[fieldName];
+                        if (field != null)
+                        {
+                            field.ReadOnly = true;
+                        }
                     }
                 }
-            }
-            else
-            {
-                _logger.LogError("Could not find an AcroForm in the PDF template.");
-            }
+                else
+                {
+                    _logger.LogError("Could not find an AcroForm in the PDF template.");
+                }
 
-            using (MemoryStream stream = new MemoryStream())
-            {
-                document.Save(stream, false);
-                return stream.ToArray();
+                using (MemoryStream outputStream = new MemoryStream())
+                {
+                    document.Save(outputStream, false);
+                    return outputStream.ToArray();
+                }
             }
         }
 
@@ -318,14 +316,13 @@ namespace QApp.Pages
             }
         }
 
-        public void OnGet()
+        public async Task OnGetAsync()
         {
-            LoadDropdowns();
-            CurrentUserSignatoryName = GetCurrentUserSignatoryName();
-
+            await LoadDropdownsAsync();
+            CurrentUserSignatoryName = await GetCurrentUserSignatoryNameAsync();
         }
 
-        public IActionResult OnPost(string handler)
+        public async Task<IActionResult> OnPostAsync(string handler)
         {
             LimitMessage = string.Empty;
             Searched = false;
@@ -339,6 +336,7 @@ namespace QApp.Pages
             }
             else if (handler == "search")
             {
+                // ... (Validation logic is synchronous and remains unchanged) ...
                 if (!string.IsNullOrWhiteSpace(SearchCriteria.Edition) &&
                     int.TryParse(SearchCriteria.Edition, out int editionValue) &&
                     editionValue >= 0 && editionValue <= 99)
@@ -367,7 +365,7 @@ namespace QApp.Pages
                         if (startDate > endDate)
                         {
                             ModelState.AddModelError(string.Empty, "Start date cannot be later than end date.");
-                            LoadDropdowns();
+                            await LoadDropdownsAsync(); // Still need to load dropdowns on error
                             return Page();
                         }
                     }
@@ -375,8 +373,8 @@ namespace QApp.Pages
 
                 if (PageNumber < 1) PageNumber = 1;
 
-                SearchResults = SearchCertificates(PageNumber, PageSize, out int totalResults);
-                TotalResults = totalResults;
+                // CORRECTED LINE: Deconstruct the tuple into the class properties
+                (SearchResults, TotalResults) = await SearchCertificatesAsync(PageNumber, PageSize);
                 Searched = true;
 
                 if (SearchResults == null || !SearchResults.Any())
@@ -386,33 +384,27 @@ namespace QApp.Pages
             }
             else if (handler == "export")
             {
-                // Delegate to the updated export handler
-                return OnPostExport();
+                return await OnPostExportAsync();
             }
-            LoadDropdowns();
-            CurrentUserSignatoryName = GetCurrentUserSignatoryName();
+
+            await LoadDropdownsAsync();
+            CurrentUserSignatoryName = await GetCurrentUserSignatoryNameAsync();
             return Page();
         }
 
-        private bool UpdateCertificateState(string certNo, string newState, string edition = null, bool isCancellation = false)
+        private async Task<bool> UpdateCertificateStateAsync(string certNo, string newState, string edition = null, bool isCancellation = false)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
             {
-                using (var connection = new SqlConnection(connectionString))
+                await using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
-                    string sql;
-                    if (!string.IsNullOrEmpty(edition))
-                    {
-                        sql = "UPDATE Certificates SET State = @NewState WHERE CertNo = @CertNo AND Edition = @Edition";
-                    }
-                    else
-                    {
-                        sql = "UPDATE Certificates SET State = @NewState WHERE CertNo = @CertNo";
-                    }
+                    await connection.OpenAsync();
+                    string sql = !string.IsNullOrEmpty(edition)
+                        ? "UPDATE Certificates SET State = @NewState WHERE CertNo = @CertNo AND Edition = @Edition"
+                        : "UPDATE Certificates SET State = @NewState WHERE CertNo = @CertNo";
 
-                    using (var command = new SqlCommand(sql, connection))
+                    await using (var command = new SqlCommand(sql, connection))
                     {
                         command.Parameters.AddWithValue("@NewState", newState ?? (object)DBNull.Value);
                         command.Parameters.AddWithValue("@CertNo", certNo);
@@ -420,10 +412,12 @@ namespace QApp.Pages
                         {
                             command.Parameters.AddWithValue("@Edition", edition);
                         }
-                        int rowsAffected = command.ExecuteNonQuery();
+
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
                         if (rowsAffected > 0 && isCancellation)
                         {
-                            LogUpdateAction(GetCertificateDetails(certNo, edition), new CertificateDetails { State = "Cancelled" }, certNo, true);
+                            var originalDetails = await GetCertificateDetailsAsync(certNo, edition);
+                            await LogUpdateActionAsync(originalDetails, new CertificateDetails { State = "Cancelled" }, certNo, true);
                         }
                         return rowsAffected > 0;
                     }
@@ -436,184 +430,186 @@ namespace QApp.Pages
             }
         }
 
-        public IActionResult OnPostExport()
+        public async Task<IActionResult> OnPostExportAsync()
         {
-            var allResults = GetAllCertificatesForExport();
+            // Build the SQL query and parameters based on the current search criteria.
+            var (sqlQuery, parameters) = BuildExportQuery();
 
-            if (!allResults.Any())
+            // If the query is null, it means there were no search criteria, so we shouldn't export anything.
+            if (sqlQuery == null)
             {
-                SearchErrorMessage = "No results to export.";
-                LoadDropdowns();
+                SearchErrorMessage = "Please perform a search before exporting.";
+                await LoadDropdownsAsync();
                 return Page();
             }
 
-            // Using ClosedXML to create the Excel file
-            using (var workbook = new XLWorkbook())
-            {
-                var worksheet = workbook.Worksheets.Add("Certificate Details");
-                int currentRow = 1;
-
-                // Add headers in the first row
-                var headers = new string[]
-                {
-                    "3. Certificate No.", "3. Edition of Form Tracking No.", "6. Item", "7. Description", "8. Part No.", "9. Qty.",
-                    "10. Serial No.", "11. Status/Work.", "12. Remarks (Line 1)", "12. Remarks (Line 2)", "12. Remarks (Line 3)", "12. Remarks (Line 4)", "12. Remarks (Amendment)", "13a. Approved Design Indicator","13c. Approval/Authorisation Number", "13d. Name of Signatory",
-                    "13e. Approval Date", "Part Type", "Manufacturer", "Serialization", "State", "Comment"
-                };
-                for (int i = 0; i < headers.Length; i++)
-                {
-                    worksheet.Cell(currentRow, i + 1).Value = headers[i];
-                }
-
-                // Style the header row
-                var headerRow = worksheet.Row(currentRow);
-                headerRow.Style.Font.Bold = true;
-                headerRow.Style.Fill.BackgroundColor = XLColor.LightGray;
-                headerRow.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-
-                // Add data rows
-                foreach (var cert in allResults)
-                {
-                    currentRow++;
-                    int col = 1;
-                    worksheet.Cell(currentRow, col++).Value = cert.CertNo;
-                    worksheet.Cell(currentRow, col++).Value = cert.Edition;
-                    worksheet.Cell(currentRow, col++).Value = cert.Item;
-                    worksheet.Cell(currentRow, col++).Value = cert.ProductDescription;
-                    worksheet.Cell(currentRow, col++).Value = cert.ProductNo;
-                    worksheet.Cell(currentRow, col++).Value = cert.Quantity;
-                    worksheet.Cell(currentRow, col++).Value = cert.SerialNo;
-                    worksheet.Cell(currentRow, col++).Value = cert.Status;
-                    worksheet.Cell(currentRow, col++).Value = cert.Remarks1;
-                    worksheet.Cell(currentRow, col++).Value = cert.Remarks2;
-                    worksheet.Cell(currentRow, col++).Value = cert.Remarks3;
-                    worksheet.Cell(currentRow, col++).Value = cert.Remarks4;
-                    worksheet.Cell(currentRow, col++).Value = cert.Amendment;
-                    worksheet.Cell(currentRow, col++).Value = cert.Approved;
-                    worksheet.Cell(currentRow, col++).Value = cert.Authorisation;
-                    worksheet.Cell(currentRow, col++).Value = cert.Signatory;
-                    worksheet.Cell(currentRow, col++).Value = cert.Date;
-                    worksheet.Cell(currentRow, col++).Value = cert.ProductType;
-                    worksheet.Cell(currentRow, col++).Value = cert.Manufacturer;
-                    worksheet.Cell(currentRow, col++).Value = cert.Serialization;
-                    worksheet.Cell(currentRow, col++).Value = cert.State;
-                    worksheet.Cell(currentRow, col++).Value = cert.Comment;
-
-                }
-
-                // Auto-fit columns for better readability
-                worksheet.Columns().AdjustToContents();
-
-                // Save to a memory stream
-                using (var stream = new MemoryStream())
-                {
-                    workbook.SaveAs(stream);
-                    var content = stream.ToArray();
-                    string excelName = $"Certificates-Export-{DateTime.Now:ddMMMyyyy_hh:mm:ss}.xlsx";
-
-                    // Return the stream as a file to the browser
-                    return File(
-                        content,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        excelName
-                    );
-                }
-            }
-        }
-
-        private List<CertificateDetails> GetAllCertificatesForExport()
-        {
-            var results = new List<CertificateDetails>();
             string connectionString = _configuration.GetConnectionString("SQLConnection");
-            using (SqlConnection connection = new SqlConnection(connectionString))
+            var stream = new MemoryStream();
+
+            try
             {
-                connection.Open();
-                // Removed the CTE to get all versions instead of just latest
-                var selectSql = @"SELECT CertNo, ProductNo, SerialNo, Amendment, Signatory, Date, Edition,Remarks1, Remarks2, Remarks3, Remarks4,  Quantity, Authorisation, Item, Status,Approved,  ProductDescription,Serialization, ProductType, Manufacturer, State, Comment FROM Certificates WHERE 1=1";
-                var conditions = new List<string>();
-                var parameters = new List<SqlParameter>();
-
-                // Query building logic remains the same
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.CertNo)) { conditions.Add("CertNo LIKE @CertNo"); parameters.Add(new SqlParameter("@CertNo", $"%{SearchCriteria.CertNo}%")); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.ProductNo)) { conditions.Add("ProductNo = @ProductNo"); parameters.Add(new SqlParameter("@ProductNo", SearchCriteria.ProductNo)); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.Edition)) { conditions.Add("Edition LIKE @Edition"); parameters.Add(new SqlParameter("@Edition", SearchCriteria.Edition)); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.Quantity)) { conditions.Add("Quantity LIKE @Quantity"); parameters.Add(new SqlParameter("@Quantity", SearchCriteria.Quantity)); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.SerialNo)) { conditions.Add("SerialNo LIKE @SerialNo"); parameters.Add(new SqlParameter("@SerialNo", SearchCriteria.SerialNo)); }
-                // Handle the List<string> for Amendment search
-                if (SearchCriteria.Amendment != null && SearchCriteria.Amendment.Any())
+                await using (var connection = new SqlConnection(connectionString))
                 {
-                    var amendmentValue = string.Join(", ", SearchCriteria.Amendment);
-                    conditions.Add("Amendment = @Amendment");
-                    parameters.Add(new SqlParameter("@Amendment", amendmentValue));
-                }
-
-                // Date filtering logic
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.StartDate) && !string.IsNullOrWhiteSpace(SearchCriteria.EndDate))
-                {
-                    conditions.Add("CONVERT(date, Date) >= @StartDate AND CONVERT(date, Date) <= @EndDate");
-                    parameters.Add(new SqlParameter("@StartDate", DateTime.Parse(SearchCriteria.StartDate)));
-                    parameters.Add(new SqlParameter("@EndDate", DateTime.Parse(SearchCriteria.EndDate)));
-                }
-                else if (!string.IsNullOrWhiteSpace(SearchCriteria.StartDate))
-                {
-                    conditions.Add("CONVERT(date, Date) >= @StartDate");
-                    parameters.Add(new SqlParameter("@StartDate", DateTime.Parse(SearchCriteria.StartDate)));
-                }
-                else if (!string.IsNullOrWhiteSpace(SearchCriteria.EndDate))
-                {
-                    conditions.Add("CONVERT(date, Date) <= @EndDate");
-                    parameters.Add(new SqlParameter("@EndDate", DateTime.Parse(SearchCriteria.EndDate)));
-                }
-
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.Signatory)) { conditions.Add("Signatory = @Signatory"); parameters.Add(new SqlParameter("@Signatory", SearchCriteria.Signatory)); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.State)) { conditions.Add("State = @State"); parameters.Add(new SqlParameter("@State", $"%{SearchCriteria.State}%")); }
-
-
-                if (conditions.Count > 0)
-                {
-                    selectSql += " AND " + string.Join(" AND ", conditions);
-                }
-                // Order by CertNo DESC, then by Edition DESC to show latest versions first for each certificate
-                selectSql += " ORDER BY CertNo DESC, CAST(Edition AS INT) DESC";
-
-                using (SqlCommand selectCommand = new SqlCommand(selectSql, connection))
-                {
-                    selectCommand.Parameters.AddRange(parameters.ToArray());
-                    using (SqlDataReader reader = selectCommand.ExecuteReader())
+                    await connection.OpenAsync();
+                    await using (var command = new SqlCommand(sqlQuery, connection))
                     {
-                        while (reader.Read())
+                        if (parameters.Any())
                         {
-                            results.Add(new CertificateDetails
+                            command.Parameters.AddRange(parameters.ToArray());
+                        }
+
+                        // Execute the query and get a reader to stream the results.
+                        await using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            // Check if the query returned any rows before creating the workbook.
+                            if (!reader.HasRows)
                             {
-                                CertNo = reader["CertNo"].ToString(),
-                                ProductNo = reader["ProductNo"].ToString(),
-                                ProductDescription = reader["ProductDescription"].ToString(),
-                                ProductType = reader["ProductType"].ToString(),
-                                Manufacturer = reader["Manufacturer"].ToString(),
-                                SerialNo = reader["SerialNo"].ToString(),
-                                Serialization = reader["Serialization"].ToString(),
-                                Amendment = reader["Amendment"].ToString(),
-                                Signatory = reader["Signatory"].ToString(),
-                                Date = reader["Date"] != DBNull.Value ? Convert.ToDateTime(reader["Date"]).ToString("dd MMM yyyy") : "",
-                                Quantity = reader["Quantity"].ToString(),
-                                Edition = reader["Edition"].ToString(),
-                                Remarks1 = reader["Remarks1"].ToString(),
-                                Remarks2 = reader["Remarks2"].ToString(),
-                                Remarks3 = reader["Remarks3"].ToString(),
-                                Remarks4 = reader["Remarks4"].ToString(),
-                                Authorisation = reader["Authorisation"].ToString(),
-                                Item = reader["Item"].ToString(),
-                                Status = reader["Status"].ToString(),
-                                Approved = reader["Approved"].ToString(),
-                                State = reader["State"].ToString(),
-                                Comment = reader["Comment"].ToString()
-                            });
+                                SearchErrorMessage = "No results to export based on the current criteria.";
+                                await LoadDropdownsAsync();
+                                return Page();
+                            }
+
+                            using (var workbook = new XLWorkbook())
+                            {
+                                var worksheet = workbook.Worksheets.Add("Certificate Details");
+                                int currentRow = 1;
+
+                                // Define and write the headers for the Excel file.
+                                var headers = new string[]
+                                {
+                            "3. Certificate No.", "3. Edition of Form Tracking No.", "6. Item", "7. Description", "8. Part No.", "9. Qty.",
+                            "10. Serial No.", "11. Status/Work.", "12. Remarks (Line 1)", "12. Remarks (Line 2)", "12. Remarks (Line 3)", "12. Remarks (Line 4)", "12. Remarks (Amendment)", "13a. Approved Design Indicator","13c. Approval/Authorisation Number", "13d. Name of Signatory",
+                            "13e. Approval Date", "Part Type", "Manufacturer", "Serialization", "State", "Comment"
+                                };
+
+                                for (int i = 0; i < headers.Length; i++)
+                                {
+                                    worksheet.Cell(currentRow, i + 1).Value = headers[i];
+                                }
+
+                                // Style the header row.
+                                var headerRow = worksheet.Row(currentRow);
+                                headerRow.Style.Font.Bold = true;
+                                headerRow.Style.Fill.BackgroundColor = XLColor.LightGray;
+                                headerRow.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                                // --- Streaming Core Logic ---
+                                // Loop through the reader and write each database row directly to the worksheet.
+                                while (await reader.ReadAsync())
+                                {
+                                    currentRow++;
+                                    int col = 1;
+                                    worksheet.Cell(currentRow, col++).Value = reader["CertNo"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Edition"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Item"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["ProductDescription"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["ProductNo"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Quantity"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["SerialNo"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Status"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Remarks1"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Remarks2"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Remarks3"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Remarks4"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Amendment"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Approved"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Authorisation"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Signatory"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Date"] != DBNull.Value ? Convert.ToDateTime(reader["Date"]).ToString("dd MMM yyyy") : "";
+                                    worksheet.Cell(currentRow, col++).Value = reader["ProductType"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Manufacturer"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Serialization"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["State"]?.ToString();
+                                    worksheet.Cell(currentRow, col++).Value = reader["Comment"]?.ToString();
+                                }
+
+                                // Auto-fit columns for better readability after all data is written.
+                                worksheet.Columns().AdjustToContents();
+
+                                // Save the workbook content to the memory stream.
+                                workbook.SaveAs(stream);
+                            }
                         }
                     }
                 }
+
+                // Reset the stream's position to the beginning before sending it to the browser.
+                stream.Position = 0;
+                string excelName = $"Certificates_Export_{DateTime.Now:ddMMMyyyy}.xlsx";
+
+                return File(
+                    stream,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    excelName
+                );
             }
-            return results;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred during the Excel export stream.");
+                SearchErrorMessage = "An unexpected error occurred during export. Please try again.";
+                await stream.DisposeAsync(); // Ensure stream is disposed on error
+                await LoadDropdownsAsync();
+                return Page();
+            }
         }
+
+        private (string sql, List<SqlParameter> parameters) BuildExportQuery()
+        {
+            var conditions = new List<string>();
+            var parameters = new List<SqlParameter>();
+
+            // This logic to build conditions and parameters remains the same.
+            if (!string.IsNullOrWhiteSpace(SearchCriteria.CertNo)) { conditions.Add("CertNo LIKE @CertNo"); parameters.Add(new SqlParameter("@CertNo", $"%{SearchCriteria.CertNo}%")); }
+            if (!string.IsNullOrWhiteSpace(SearchCriteria.ProductNo)) { conditions.Add("ProductNo = @ProductNo"); parameters.Add(new SqlParameter("@ProductNo", SearchCriteria.ProductNo)); }
+            if (!string.IsNullOrWhiteSpace(SearchCriteria.Edition)) { conditions.Add("Edition LIKE @Edition"); parameters.Add(new SqlParameter("@Edition", SearchCriteria.Edition)); }
+            if (!string.IsNullOrWhiteSpace(SearchCriteria.Quantity)) { conditions.Add("Quantity LIKE @Quantity"); parameters.Add(new SqlParameter("@Quantity", SearchCriteria.Quantity)); }
+            if (!string.IsNullOrWhiteSpace(SearchCriteria.SerialNo)) { conditions.Add("SerialNo LIKE @SerialNo"); parameters.Add(new SqlParameter("@SerialNo", $"%{SearchCriteria.SerialNo}%")); }
+            if (SearchCriteria.Amendment != null && SearchCriteria.Amendment.Any())
+            {
+                var amendmentValue = string.Join(", ", SearchCriteria.Amendment);
+                conditions.Add("Amendment = @Amendment");
+                parameters.Add(new SqlParameter("@Amendment", amendmentValue));
+            }
+            if (!string.IsNullOrWhiteSpace(SearchCriteria.StartDate) && !string.IsNullOrWhiteSpace(SearchCriteria.EndDate))
+            {
+                conditions.Add("CONVERT(date, Date) >= @StartDate AND CONVERT(date, Date) <= @EndDate");
+                parameters.Add(new SqlParameter("@StartDate", DateTime.Parse(SearchCriteria.StartDate)));
+                parameters.Add(new SqlParameter("@EndDate", DateTime.Parse(SearchCriteria.EndDate)));
+            }
+            else if (!string.IsNullOrWhiteSpace(SearchCriteria.StartDate))
+            {
+                conditions.Add("CONVERT(date, Date) >= @StartDate");
+                parameters.Add(new SqlParameter("@StartDate", DateTime.Parse(SearchCriteria.StartDate)));
+            }
+            else if (!string.IsNullOrWhiteSpace(SearchCriteria.EndDate))
+            {
+                conditions.Add("CONVERT(date, Date) <= @EndDate");
+                parameters.Add(new SqlParameter("@EndDate", DateTime.Parse(SearchCriteria.EndDate)));
+            }
+            if (!string.IsNullOrWhiteSpace(SearchCriteria.Signatory)) { conditions.Add("Signatory = @Signatory"); parameters.Add(new SqlParameter("@Signatory", SearchCriteria.Signatory)); }
+            if (!string.IsNullOrWhiteSpace(SearchCriteria.State)) { conditions.Add("State = @State"); parameters.Add(new SqlParameter("@State", $"%{SearchCriteria.State}%")); }
+
+   
+
+            // Base SELECT statement
+            var selectSql = @"SELECT CertNo, ProductNo, SerialNo, Amendment, Signatory, Date, Edition,Remarks1, Remarks2, Remarks3, Remarks4, Quantity, Authorisation, Item, Status, Approved, ProductDescription,Serialization, ProductType, Manufacturer, State, Comment FROM Certificates";
+
+            // Conditionally add the WHERE clause ONLY if there are conditions
+            if (conditions.Any())
+            {
+                selectSql += " WHERE " + string.Join(" AND ", conditions);
+            }
+
+            // Always add the ORDER BY clause
+            selectSql += " ORDER BY CertNo DESC, CAST(Edition AS INT) DESC";
+
+        
+
+            return (selectSql, parameters);
+        }
+
+
+
 
         public async Task<bool> IsUserAuthorizedToUpdate(string certNo)
         {
@@ -624,7 +620,7 @@ namespace QApp.Pages
         }
 
 
-        public IActionResult OnGetCertificateDetails(string certNo, string edition = null)
+        public async Task<IActionResult> OnGetCertificateDetailsAsync(string certNo, string edition = null)
         {
             if (string.IsNullOrWhiteSpace(certNo))
             {
@@ -633,7 +629,7 @@ namespace QApp.Pages
 
             try
             {
-                var certificateDetails = GetCertificateDetails(certNo, edition);
+                var certificateDetails = await GetCertificateDetailsAsync(certNo, edition);
                 if (certificateDetails == null)
                 {
                     return new JsonResult(new { success = false, message = "Certificate not found." });
@@ -643,6 +639,7 @@ namespace QApp.Pages
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error getting details for certificate {CertNo}", certNo);
                 return new JsonResult(new { success = false, message = $"Database error: {ex.Message}" });
             }
         }
@@ -655,7 +652,7 @@ namespace QApp.Pages
       string quantity, string authorisation, string item, string status, string approved,
       string state, string comment)
         {
-            var originalDetails = GetCertificateDetails(certNo, edition);
+            var originalDetails = await GetCertificateDetailsAsync(certNo, edition);
             if (originalDetails == null)
             {
                 return new JsonResult(new { success = false, message = "Certificate not found." });
@@ -665,7 +662,7 @@ namespace QApp.Pages
                 return new JsonResult(new { success = false, message = "Cannot update a cancelled certificate." });
             }
 
-            string currentUserSignatory = GetCurrentUserSignatoryName();
+            string currentUserSignatory = await GetCurrentUserSignatoryNameAsync();
             string finalSignatoryName = originalDetails.Signatory;
             if (!string.IsNullOrEmpty(currentUserSignatory) && originalDetails.Signatory != currentUserSignatory)
             {
@@ -746,7 +743,7 @@ namespace QApp.Pages
                 bool success;
                 if (originalDetails.State == "Valid")
                 {
-                    success = UpdateCertificateInDatabase(originalDetails, newDetails, certNo, edition);
+                    success = await UpdateCertificateInDatabaseAsync(originalDetails, newDetails, certNo, edition);
                 }
                 else
                 {
@@ -767,12 +764,12 @@ namespace QApp.Pages
                     {
                         errors.Add("Edition has an invalid format.");
                     }
-                    success = InsertNewCertificateVersion(originalDetails, newDetails, certNo);
+                    success = await InsertNewCertificateVersionAsync(originalDetails, newDetails, certNo);
                 }
 
                 if (success)
                 {
-                    LogUpdateAction(originalDetails, newDetails, certNo);
+                    await LogUpdateActionAsync(originalDetails, newDetails, certNo);
                     return new JsonResult(new { success = true, message = "New certificate version created successfully." });
                 }
                 else
@@ -789,7 +786,7 @@ namespace QApp.Pages
 
         public async Task<IActionResult> OnPostCancelCertificateAsync(string certNo, string edition)
         {
-            var originalDetails = GetCertificateDetails(certNo, edition);
+            var originalDetails = await GetCertificateDetailsAsync(certNo, edition);
             if (originalDetails == null)
             {
                 return new JsonResult(new { success = false, message = "Certificate not found." });
@@ -797,7 +794,7 @@ namespace QApp.Pages
 
             try
             {
-                var success = UpdateCertificateState(certNo, "Cancelled", edition, true);
+                var success = await UpdateCertificateStateAsync(certNo, "Cancelled", edition, true);
 
                 if (success)
                 {
@@ -816,14 +813,14 @@ namespace QApp.Pages
         }
 
         // Add this new method to insert a new certificate version
-        private bool InsertNewCertificateVersion(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo)
+        private async Task<bool> InsertNewCertificateVersionAsync(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                await using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
+                    await connection.OpenAsync();
 
                     // Insert new certificate entry with incremented edition
                     var sql = @"INSERT INTO Certificates (
@@ -838,7 +835,7 @@ namespace QApp.Pages
                 @Item, @Status, @Approved, @State, @Comment
             )";
 
-                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    await using (var command = new SqlCommand(sql, connection))
                     {
                         command.Parameters.AddWithValue("@CertNo", newDetails.CertNo);
                         command.Parameters.AddWithValue("@ProductNo", newDetails.ProductNo ?? (object)DBNull.Value);
@@ -875,7 +872,7 @@ namespace QApp.Pages
             }
         }
 
-        private bool UpdateCertificateInDatabase(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo, string edition)
+        private async Task<bool> UpdateCertificateInDatabaseAsync(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo, string edition)
         {
             var setClauses = new List<string>();
             var parameters = new List<SqlParameter>();
@@ -922,13 +919,12 @@ namespace QApp.Pages
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                await using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
-                    // Dynamically join the SET clauses
+                    await connection.OpenAsync();
                     var sql = $"UPDATE Certificates SET {string.Join(", ", setClauses)} WHERE CertNo = @CertNo AND Edition = @Edition";
 
-                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    await using (var command = new SqlCommand(sql, connection))
                     {
                         command.Parameters.AddRange(parameters.ToArray());
                         command.Parameters.AddWithValue("@CertNo", certNo); // Add the WHERE clause parameter
@@ -947,10 +943,9 @@ namespace QApp.Pages
             }
         }
 
-        private void LogUpdateAction(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo, bool isCancellation = false)
+        private async Task LogUpdateActionAsync(CertificateDetails originalDetails, CertificateDetails newDetails, string certNo, bool isCancellation = false)
         {
-            try
-            {
+            
                 // Check if any changes were made at all.
                 var changesExist = originalDetails.GetType().GetProperties()
                     .Any(prop => !string.Equals(prop.GetValue(originalDetails)?.ToString(), prop.GetValue(newDetails)?.ToString()));
@@ -962,10 +957,12 @@ namespace QApp.Pages
                 }
 
                 string connectionString = _configuration.GetConnectionString("SQLConnection");
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                try
                 {
-                    conn.Open();
-                    var logquery = @"
+                    await using (var conn = new SqlConnection(connectionString))
+                    {
+                        await conn.OpenAsync();
+                        var logquery = @"
                         INSERT INTO Log_Certificates (
                             CertNo, Action, Performed_By, Datetime, ProductNo, ProductDescription, SerialNo, 
                             Serialization, Amendment, Signatory, Date, Edition, Remarks1, Remarks2, 
@@ -976,136 +973,145 @@ namespace QApp.Pages
                             @Remarks3, @Remarks4, @Quantity, @Authorisation, @Item, @Status, @Approved, @State, @Comment
                         )";
 
-                    using (SqlCommand cmd = new SqlCommand(logquery, conn))
-                    {
-                        // Helper function to add the parameter's value only if it has changed
-                        // Corrected code
-                        void AddParamIfChanged(string paramName, string originalValue, string newValue)
+                        await using (var cmd = new SqlCommand(logquery, conn))
                         {
-                            // Treat null, empty, and whitespace strings as equivalent.
-                            if (string.IsNullOrWhiteSpace(originalValue) && string.IsNullOrWhiteSpace(newValue))
+                            // Helper function to add the parameter's value only if it has changed
+                            // Corrected code
+                            void AddParamIfChanged(string paramName, string originalValue, string newValue)
                             {
-                                cmd.Parameters.AddWithValue(paramName, DBNull.Value);
-                                return;
+                                // Treat null, empty, and whitespace strings as equivalent.
+                                if (string.IsNullOrWhiteSpace(originalValue) && string.IsNullOrWhiteSpace(newValue))
+                                {
+                                    cmd.Parameters.AddWithValue(paramName, DBNull.Value);
+                                    return;
+                                }
+
+                                // Perform a direct comparison for non-empty values.
+                                if (string.Equals(originalValue, newValue))
+                                {
+                                    cmd.Parameters.AddWithValue(paramName, DBNull.Value);
+                                }
+                                else
+                                {
+                                    cmd.Parameters.AddWithValue(paramName, (object)newValue ?? DBNull.Value);
+                                }
                             }
 
-                            // Perform a direct comparison for non-empty values.
-                            if (string.Equals(originalValue, newValue))
+                            // Add non-conditional parameters
+                            cmd.Parameters.AddWithValue("@CertNo", certNo);
+                            cmd.Parameters.AddWithValue("@Action", "Update");
+                            cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
+                            cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
+
+                            if (isCancellation)
                             {
-                                cmd.Parameters.AddWithValue(paramName, DBNull.Value);
+                                // Log that the state was changed to Cancelled
+                                cmd.Parameters.AddWithValue("@State", "Cancelled");
+
+                                // Add DBNull for all other parameters to satisfy the INSERT query
+                                cmd.Parameters.AddWithValue("@ProductNo", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@ProductDescription", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@SerialNo", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Serialization", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Amendment", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Signatory", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Date", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Edition", (object)originalDetails.Edition ?? DBNull.Value); // Log the edition that was cancelled
+                                cmd.Parameters.AddWithValue("@Remarks1", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Remarks2", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Remarks3", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Remarks4", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Quantity", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Authorisation", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Item", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Status", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Approved", DBNull.Value);
+                                cmd.Parameters.AddWithValue("@Comment", (object)newDetails.Comment ?? DBNull.Value);
                             }
                             else
                             {
-                                cmd.Parameters.AddWithValue(paramName, (object)newValue ?? DBNull.Value);
+                                // This part for regular updates remains unchanged
+                                AddParamIfChanged("@ProductNo", originalDetails.ProductNo, newDetails.ProductNo);
+                                AddParamIfChanged("@ProductDescription", originalDetails.ProductDescription, newDetails.ProductDescription);
+                                AddParamIfChanged("@SerialNo", originalDetails.SerialNo, newDetails.SerialNo);
+                                AddParamIfChanged("@Serialization", originalDetails.Serialization, newDetails.Serialization);
+                                AddParamIfChanged("@Amendment", originalDetails.Amendment, newDetails.Amendment);
+                                AddParamIfChanged("@Signatory", originalDetails.Signatory, newDetails.Signatory);
+                                AddParamIfChanged("@Date", originalDetails.Date, newDetails.Date);
+                                AddParamIfChanged("@Edition", originalDetails.Edition, newDetails.Edition);
+                                AddParamIfChanged("@Remarks1", originalDetails.Remarks1, newDetails.Remarks1);
+                                AddParamIfChanged("@Remarks2", originalDetails.Remarks2, newDetails.Remarks2);
+                                AddParamIfChanged("@Remarks3", originalDetails.Remarks3, newDetails.Remarks3);
+                                AddParamIfChanged("@Remarks4", originalDetails.Remarks4, newDetails.Remarks4);
+                                AddParamIfChanged("@Quantity", originalDetails.Quantity, newDetails.Quantity);
+                                AddParamIfChanged("@Authorisation", originalDetails.Authorisation, newDetails.Authorisation);
+                                AddParamIfChanged("@Item", originalDetails.Item, newDetails.Item);
+                                AddParamIfChanged("@Status", originalDetails.Status, newDetails.Status);
+                                AddParamIfChanged("@Approved", originalDetails.Approved, newDetails.Approved);
+                                AddParamIfChanged("@State", originalDetails.State, newDetails.State);
+                                AddParamIfChanged("@Comment", originalDetails.Comment, newDetails.Comment);
                             }
-                        }
 
-                        // Add non-conditional parameters
+
+                            await cmd.ExecuteNonQueryAsync();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error logging update action for certificate {CertNo}", certNo);
+                }
+            }
+        private async Task LogPrintActionAsync(string certNo, string edition = null, bool stateChanged = false)
+        {
+            string connectionString = _configuration.GetConnectionString("SQLConnection");
+            try
+            {
+                await using (var conn = new SqlConnection(connectionString))
+                {
+                    await conn.OpenAsync();
+                    var logquery = "INSERT INTO Log_Certificates (CertNo, Action, Performed_By, Datetime, State, Edition) VALUES (@CertNo, @Action, @ID, @Time, @State, @Edition)";
+                    await using (SqlCommand cmd = new SqlCommand(logquery, conn))
+                    {
                         cmd.Parameters.AddWithValue("@CertNo", certNo);
-                        cmd.Parameters.AddWithValue("@Action", "Update");
+                        cmd.Parameters.AddWithValue("@Action", "Print");
                         cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
                         cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
 
-                        if (isCancellation)
+                        // Only log "Printed" state if it was actually changed
+                        if (stateChanged)
                         {
-                            // Log that the state was changed to Cancelled
-                            cmd.Parameters.AddWithValue("@State", "Cancelled");
+                            cmd.Parameters.AddWithValue("@State", "Printed");
 
-                            // Add DBNull for all other parameters to satisfy the INSERT query
-                            cmd.Parameters.AddWithValue("@ProductNo", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@ProductDescription", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@SerialNo", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Serialization", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Amendment", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Signatory", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Date", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Edition", (object)originalDetails.Edition ?? DBNull.Value); // Log the edition that was cancelled
-                            cmd.Parameters.AddWithValue("@Remarks1", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Remarks2", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Remarks3", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Remarks4", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Quantity", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Authorisation", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Item", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Status", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Approved", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Comment", (object)newDetails.Comment ?? DBNull.Value);
                         }
                         else
                         {
-                            // This part for regular updates remains unchanged
-                            AddParamIfChanged("@ProductNo", originalDetails.ProductNo, newDetails.ProductNo);
-                            AddParamIfChanged("@ProductDescription", originalDetails.ProductDescription, newDetails.ProductDescription);
-                            AddParamIfChanged("@SerialNo", originalDetails.SerialNo, newDetails.SerialNo);
-                            AddParamIfChanged("@Serialization", originalDetails.Serialization, newDetails.Serialization);
-                            AddParamIfChanged("@Amendment", originalDetails.Amendment, newDetails.Amendment);
-                            AddParamIfChanged("@Signatory", originalDetails.Signatory, newDetails.Signatory);
-                            AddParamIfChanged("@Date", originalDetails.Date, newDetails.Date);
-                            AddParamIfChanged("@Edition", originalDetails.Edition, newDetails.Edition);
-                            AddParamIfChanged("@Remarks1", originalDetails.Remarks1, newDetails.Remarks1);
-                            AddParamIfChanged("@Remarks2", originalDetails.Remarks2, newDetails.Remarks2);
-                            AddParamIfChanged("@Remarks3", originalDetails.Remarks3, newDetails.Remarks3);
-                            AddParamIfChanged("@Remarks4", originalDetails.Remarks4, newDetails.Remarks4);
-                            AddParamIfChanged("@Quantity", originalDetails.Quantity, newDetails.Quantity);
-                            AddParamIfChanged("@Authorisation", originalDetails.Authorisation, newDetails.Authorisation);
-                            AddParamIfChanged("@Item", originalDetails.Item, newDetails.Item);
-                            AddParamIfChanged("@Status", originalDetails.Status, newDetails.Status);
-                            AddParamIfChanged("@Approved", originalDetails.Approved, newDetails.Approved);
-                            AddParamIfChanged("@State", originalDetails.State, newDetails.State);
-                            AddParamIfChanged("@Comment", originalDetails.Comment, newDetails.Comment);
+                            cmd.Parameters.AddWithValue("@State", DBNull.Value);
+
                         }
 
 
-                        cmd.ExecuteNonQuery();
+                        cmd.Parameters.AddWithValue("@Edition", edition ?? (object)DBNull.Value);
+                        await cmd.ExecuteNonQueryAsync();
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error logging update action for certificate {CertNo}", certNo);
-            }
-        }
-        private void LogPrintAction(string certNo, string edition = null, bool stateChanged = false)
-        {
-            string connectionString = _configuration.GetConnectionString("SQLConnection");
-            using (SqlConnection conn = new SqlConnection(connectionString))
-            {
-                conn.Open();
-                var logquery = "INSERT INTO Log_Certificates (CertNo, Action, Performed_By, Datetime, State, Edition) VALUES (@CertNo, @Action, @ID, @Time, @State, @Edition)";
-                using (SqlCommand cmd = new SqlCommand(logquery, conn))
-                {
-                    cmd.Parameters.AddWithValue("@CertNo", certNo);
-                    cmd.Parameters.AddWithValue("@Action", "Print");
-                    cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
-
-                    // Only log "Printed" state if it was actually changed
-                    if (stateChanged)
-                    {
-                        cmd.Parameters.AddWithValue("@State", "Printed");
-
-                    }
-                    else
-                    {
-                        cmd.Parameters.AddWithValue("@State", DBNull.Value);
-
-                    }
-
-
-                    cmd.Parameters.AddWithValue("@Edition", edition ?? (object)DBNull.Value);
-                    cmd.ExecuteNonQuery();
-                }
+                _logger.LogError(ex, "Error logging print action for certificate {CertNo}", certNo);
             }
         }
 
-        private CertificateDetails GetCertificateDetails(string certNo, string edition = null)
+        private async Task<CertificateDetails> GetCertificateDetailsAsync(string certNo, string edition = null)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                // Use `await using` for async disposal
+                await using (SqlConnection connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
+                    // FIX: Use OpenAsync()
+                    await connection.OpenAsync();
 
                     string sql;
                     if (!string.IsNullOrEmpty(edition))
@@ -1130,7 +1136,7 @@ namespace QApp.Pages
                        ORDER BY CAST(Edition AS INT) DESC";
                     }
 
-                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    await using (SqlCommand command = new SqlCommand(sql, connection))
                     {
                         command.Parameters.Add(new SqlParameter("@CertNo", certNo));
                         if (!string.IsNullOrEmpty(edition))
@@ -1138,9 +1144,10 @@ namespace QApp.Pages
                             command.Parameters.Add(new SqlParameter("@Edition", edition));
                         }
 
-                        using (SqlDataReader reader = command.ExecuteReader())
+                        await using (SqlDataReader reader = await command.ExecuteReaderAsync())
                         {
-                            if (reader.Read())
+                            // FIX: Use ReadAsync()
+                            if (await reader.ReadAsync())
                             {
                                 return new CertificateDetails
                                 {
@@ -1181,74 +1188,145 @@ namespace QApp.Pages
         }
 
 
-        private List<CertificateSummary> SearchCertificates(int pageNumber, int pageSize, out int totalResults)
+        private async Task<(List<CertificateSummary> results, int total)> SearchCertificatesAsync(int pageNumber, int pageSize)
         {
             var results = new List<CertificateSummary>();
-            totalResults = 0;
+            int totalResults = 0;
             string connectionString = _configuration.GetConnectionString("SQLConnection");
-            using (SqlConnection connection = new SqlConnection(connectionString))
+
+            await using (SqlConnection connection = new SqlConnection(connectionString))
             {
-                connection.Open();
+                await connection.OpenAsync();
 
-                // Modified query to include max edition information
-                var countSql = @"SELECT COUNT(*) FROM Certificates WHERE 1=1";
-                var selectSql = @"SELECT CertNo, ProductNo, SerialNo, Amendment, Signatory, Date, Edition, Quantity, State,
-                         CAST(Edition AS INT) as EditionInt,
-                         MAX(CAST(Edition AS INT)) OVER (PARTITION BY CertNo) as MaxEdition
-                         FROM Certificates WHERE 1=1";
-
+                // Build conditions and parameters once
                 var conditions = new List<string>();
                 var parameters = new List<SqlParameter>();
 
-                // Your existing search conditions remain the same
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.CertNo)) { conditions.Add("CertNo LIKE @CertNo"); parameters.Add(new SqlParameter("@CertNo", $"%{SearchCriteria.CertNo}%")); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.ProductNo)) { conditions.Add("ProductNo = @ProductNo"); parameters.Add(new SqlParameter("@ProductNo", SearchCriteria.ProductNo)); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.SerialNo)) { conditions.Add("SerialNo LIKE @SerialNo"); parameters.Add(new SqlParameter("@SerialNo", $"%{SearchCriteria.SerialNo}%")); }
+                if (!string.IsNullOrWhiteSpace(SearchCriteria.CertNo))
+                {
+                    conditions.Add("c.CertNo LIKE @CertNo");
+                    parameters.Add(new SqlParameter("@CertNo", $"%{SearchCriteria.CertNo}%"));
+                }
+
+                if (!string.IsNullOrWhiteSpace(SearchCriteria.ProductNo))
+                {
+                    conditions.Add("c.ProductNo = @ProductNo");
+                    parameters.Add(new SqlParameter("@ProductNo", SearchCriteria.ProductNo));
+                }
+
+                if (!string.IsNullOrWhiteSpace(SearchCriteria.SerialNo))
+                {
+                    conditions.Add("c.SerialNo LIKE @SerialNo");
+                    parameters.Add(new SqlParameter("@SerialNo", $"%{SearchCriteria.SerialNo}%"));
+                }
+
                 if (SearchCriteria.Amendment != null && SearchCriteria.Amendment.Any())
                 {
                     var amendmentValue = string.Join(", ", SearchCriteria.Amendment);
-                    conditions.Add("Amendment = @Amendment");
+                    conditions.Add("c.Amendment = @Amendment");
                     parameters.Add(new SqlParameter("@Amendment", amendmentValue));
                 }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.Signatory)) { conditions.Add("Signatory = @Signatory"); parameters.Add(new SqlParameter("@Signatory", SearchCriteria.Signatory)); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.StartDate) && !string.IsNullOrWhiteSpace(SearchCriteria.EndDate)) { conditions.Add("CONVERT(date, Date) >= @StartDate AND CONVERT(date, Date) <= @EndDate"); parameters.Add(new SqlParameter("@StartDate", DateTime.Parse(SearchCriteria.StartDate))); parameters.Add(new SqlParameter("@EndDate", DateTime.Parse(SearchCriteria.EndDate))); }
-                else if (!string.IsNullOrWhiteSpace(SearchCriteria.StartDate)) { conditions.Add("CONVERT(date, Date) >= @StartDate"); parameters.Add(new SqlParameter("@StartDate", DateTime.Parse(SearchCriteria.StartDate))); }
-                else if (!string.IsNullOrWhiteSpace(SearchCriteria.EndDate)) { conditions.Add("CONVERT(date, Date) <= @EndDate"); parameters.Add(new SqlParameter("@EndDate", DateTime.Parse(SearchCriteria.EndDate))); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.Edition)) { conditions.Add("Edition LIKE @Edition"); parameters.Add(new SqlParameter("@Edition", $"%{SearchCriteria.Edition}%")); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.Quantity)) { conditions.Add("Quantity LIKE @Quantity"); parameters.Add(new SqlParameter("@Quantity", $"%{SearchCriteria.Quantity}%")); }
-                if (!string.IsNullOrWhiteSpace(SearchCriteria.State)) { conditions.Add("State LIKE @State"); parameters.Add(new SqlParameter("@State", $"%{SearchCriteria.State}%")); }
 
-                if (conditions.Count > 0)
+                if (!string.IsNullOrWhiteSpace(SearchCriteria.Signatory))
                 {
-                    var whereClause = " AND " + string.Join(" AND ", conditions);
-                    countSql += whereClause;
-                    selectSql += whereClause;
+                    conditions.Add("c.Signatory = @Signatory");
+                    parameters.Add(new SqlParameter("@Signatory", SearchCriteria.Signatory));
                 }
 
-                // Order by CertNo DESC, then by Edition DESC to show latest versions first for each certificate
-                selectSql += " ORDER BY CertNo DESC, CAST(Edition AS INT) DESC";
-
-                // Get total count
-                using (SqlCommand countCommand = new SqlCommand(countSql, connection))
+                // Date filtering logic
+                if (!string.IsNullOrWhiteSpace(SearchCriteria.StartDate) && !string.IsNullOrWhiteSpace(SearchCriteria.EndDate))
                 {
-                    foreach (var param in parameters) { countCommand.Parameters.Add(new SqlParameter(param.ParameterName, param.Value)); }
-                    object countResult = countCommand.ExecuteScalar();
-                    totalResults = countResult != null ? Convert.ToInt32(countResult) : 0;
+                    conditions.Add("c.Date >= @StartDate AND c.Date <= @EndDate");
+                    parameters.Add(new SqlParameter("@StartDate", DateTime.Parse(SearchCriteria.StartDate)));
+                    parameters.Add(new SqlParameter("@EndDate", DateTime.Parse(SearchCriteria.EndDate).AddDays(1)));
+                }
+                else if (!string.IsNullOrWhiteSpace(SearchCriteria.StartDate))
+                {
+                    conditions.Add("c.Date >= @StartDate");
+                    parameters.Add(new SqlParameter("@StartDate", DateTime.Parse(SearchCriteria.StartDate)));
+                }
+                else if (!string.IsNullOrWhiteSpace(SearchCriteria.EndDate))
+                {
+                    conditions.Add("c.Date <= @EndDate");
+                    parameters.Add(new SqlParameter("@EndDate", DateTime.Parse(SearchCriteria.EndDate).AddDays(1)));
                 }
 
-                // Get paginated results
-                int offset = (pageNumber - 1) * pageSize;
-                selectSql += " OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
-
-                using (SqlCommand selectCommand = new SqlCommand(selectSql, connection))
+                if (!string.IsNullOrWhiteSpace(SearchCriteria.Edition))
                 {
-                    selectCommand.Parameters.AddRange(parameters.ToArray());
-                    selectCommand.Parameters.AddWithValue("@Offset", offset);
-                    selectCommand.Parameters.AddWithValue("@PageSize", pageSize);
-                    using (SqlDataReader reader = selectCommand.ExecuteReader())
+                    conditions.Add("c.Edition LIKE @Edition");
+                    parameters.Add(new SqlParameter("@Edition", $"%{SearchCriteria.Edition}%"));
+                }
+
+                if (!string.IsNullOrWhiteSpace(SearchCriteria.Quantity))
+                {
+                    conditions.Add("c.Quantity LIKE @Quantity");
+                    parameters.Add(new SqlParameter("@Quantity", $"%{SearchCriteria.Quantity}%"));
+                }
+
+                if (!string.IsNullOrWhiteSpace(SearchCriteria.State))
+                {
+                    conditions.Add("c.State LIKE @State");
+                    parameters.Add(new SqlParameter("@State", $"%{SearchCriteria.State}%"));
+                }
+
+                string whereClause = conditions.Count > 0 ? " AND " + string.Join(" AND ", conditions) : "";
+
+                // OPTIMIZED: Single CTE-based query that gets both count and data in one execution
+                var combinedSql = $@"
+WITH MaxEditions AS (
+    SELECT CertNo, MAX(CAST(Edition AS INT)) AS MaxEdition 
+    FROM Certificates 
+    GROUP BY CertNo
+),
+FilteredCertificates AS (
+    SELECT
+        c.CertNo, c.ProductNo, c.SerialNo, c.Amendment, c.Signatory, c.Date, 
+        c.Edition, c.Quantity, c.State,
+        CAST(c.Edition AS INT) AS EditionInt,
+        me.MaxEdition,
+        ROW_NUMBER() OVER (ORDER BY c.CertNo DESC, CAST(c.Edition AS INT) DESC) AS RowNum
+    FROM Certificates c
+    INNER JOIN MaxEditions me ON c.CertNo = me.CertNo
+    WHERE 1=1{whereClause}
+),
+TotalCount AS (
+    SELECT COUNT(*) AS Total FROM FilteredCertificates
+)
+SELECT 
+    fc.CertNo, fc.ProductNo, fc.SerialNo, fc.Amendment, fc.Signatory, fc.Date, 
+    fc.Edition, fc.Quantity, fc.State, fc.EditionInt, fc.MaxEdition,
+    tc.Total
+FROM FilteredCertificates fc
+CROSS JOIN TotalCount tc
+WHERE fc.RowNum BETWEEN @StartRow AND @EndRow
+ORDER BY fc.CertNo DESC, fc.EditionInt DESC";
+
+                // Calculate pagination parameters
+                int startRow = (pageNumber - 1) * pageSize + 1;
+                int endRow = pageNumber * pageSize;
+
+                await using (SqlCommand command = new SqlCommand(combinedSql, connection))
+                {
+                    // Add search parameters
+                    command.Parameters.AddRange(parameters.ToArray());
+
+                    // Add pagination parameters
+                    command.Parameters.AddWithValue("@StartRow", startRow);
+                    command.Parameters.AddWithValue("@EndRow", endRow);
+
+                    await using (SqlDataReader reader = await command.ExecuteReaderAsync())
                     {
-                        while (reader.Read())
+                        bool totalSet = false;
+
+                        while (await reader.ReadAsync())
                         {
+                            // Set total count from first row (all rows have the same total)
+                            if (!totalSet)
+                            {
+                                totalResults = Convert.ToInt32(reader["Total"]);
+                                totalSet = true;
+                            }
+
                             var editionInt = Convert.ToInt32(reader["EditionInt"]);
                             var maxEdition = Convert.ToInt32(reader["MaxEdition"]);
 
@@ -1263,69 +1341,139 @@ namespace QApp.Pages
                                 Quantity = reader["Quantity"].ToString(),
                                 Edition = reader["Edition"].ToString(),
                                 State = reader["State"].ToString(),
-                                IsLatestEdition = editionInt == maxEdition // Add this property
+                                IsLatestEdition = editionInt == maxEdition
                             });
                         }
                     }
                 }
             }
-            return results;
+
+            return (results, totalResults);
         }
 
-        private void LoadDropdowns()
+        private async Task LoadDropdownsAsync()
         {
-            ProductNoList = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT ProductNo FROM Certificates ORDER BY ProductNo"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { ProductNoList.Add(new SelectListItem { Value = reader["ProductNo"].ToString(), Text = reader["ProductNo"].ToString() }); } } }
-            ProductNoListNew = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT ProductNo FROM PartNumbers ORDER BY ProductNo"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { ProductNoListNew.Add(new SelectListItem { Value = reader["ProductNo"].ToString(), Text = reader["ProductNo"].ToString() }); } } }
-            AmendmentList = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Amendment FROM Certificates ORDER BY Amendment"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { AmendmentList.Add(new SelectListItem { Value = reader["Amendment"].ToString(), Text = reader["Amendment"].ToString() }); } } }
-            AmendmentListNew = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Amendment FROM Amendments ORDER BY Amendment"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { AmendmentListNew.Add(new SelectListItem { Value = reader["Amendment"].ToString(), Text = reader["Amendment"].ToString() }); } } }
-            SignatoryList = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Signatory FROM Certificates ORDER BY Signatory"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { SignatoryList.Add(new SelectListItem { Value = reader["Signatory"].ToString(), Text = reader["Signatory"].ToString() }); } } }
-            SignatoryListNew = new List<SelectListItem>();
+            // Define a unique key for the cached dropdown data.
+            const string dropdownCacheKey = "SearchPageDropdowns_v1";
 
-            StateList = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT State FROM Certificates WHERE State IS NOT NULL AND State != '' ORDER BY State"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { StateList.Add(new SelectListItem { Value = reader["State"].ToString(), Text = reader["State"].ToString() }); } } }
-            StateListNew = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT State FROM States ORDER BY State"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { StateListNew.Add(new SelectListItem { Value = reader["State"].ToString(), Text = reader["State"].ToString() }); } } }
-
-
-            ApprovedList = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Approved FROM Certificates ORDER BY Approved"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { ApprovedList.Add(new SelectListItem { Value = reader["Approved"].ToString(), Text = reader["Approved"].ToString() }); } } }
-            ApprovedListNew = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT ApprovedDesignIndicator FROM ApprovedDesignIndicators ORDER BY ApprovedDesignIndicator"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { ApprovedListNew.Add(new SelectListItem { Value = reader["ApprovedDesignIndicator"].ToString(), Text = reader["ApprovedDesignIndicator"].ToString() }); } } }
-
-
-            StatusList = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Status FROM Certificates ORDER BY Status"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { StatusList.Add(new SelectListItem { Value = reader["Status"].ToString(), Text = reader["Status"].ToString() }); } } }
-            StatusListNew = new List<SelectListItem>();
-            using (SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("SQLConnection"))) { conn.Open(); string query = "SELECT DISTINCT Status FROM Statuses ORDER BY Status"; using (SqlCommand cmd = new SqlCommand(query, conn)) using (SqlDataReader reader = cmd.ExecuteReader()) { while (reader.Read()) { StatusListNew.Add(new SelectListItem { Value = reader["Status"].ToString(), Text = reader["Status"].ToString() }); } } }
-
-            string connectionString = _configuration.GetConnectionString("SQLConnection");
-            var userId = User.Identity?.Name;
-
-
-
-
-
-            using (SqlConnection conn = new SqlConnection(connectionString))
+            // Use a tuple to store all the lists together in a single cache entry.
+            // This is more efficient than caching each list separately.
+            var cachedLists = await _cache.GetOrCreateAsync(dropdownCacheKey, async entry =>
             {
-                conn.Open();
-                string query = "SELECT DISTINCT Name FROM Users WHERE Role = @SignatoryRole ORDER BY Name";
-                using (SqlCommand cmd = new SqlCommand(query, conn))
-                {
-                    // Assuming '2' is the Role ID for Signatories in your Users table.
-                    cmd.Parameters.AddWithValue("@SignatoryRole", 2);
+                // Set the cache expiration policies.
+                // Keep the data for 10 minutes from the last access (sliding).
+                // Force an absolute refresh every 1 hour to ensure data isn't too stale.
+                entry.SlidingExpiration = TimeSpan.FromMinutes(2); // Keep for 2 mins from last access
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10); // Force refresh after 10 mins
 
-                    using (SqlDataReader reader = cmd.ExecuteReader())
+                _logger.LogInformation("Cache miss for '{CacheKey}'. Fetching dropdowns from database.", dropdownCacheKey);
+
+                // Initialize lists that will be populated and cached.
+                var productNoList = new List<SelectListItem>();
+                var productNoListNew = new List<SelectListItem>();
+                var amendmentList = new List<SelectListItem>();
+                var amendmentListNew = new List<SelectListItem>();
+                var signatoryList = new List<SelectListItem>();
+                var signatoryListNew = new List<SelectListItem>();
+                var stateList = new List<SelectListItem>();
+                var stateListNew = new List<SelectListItem>();
+                var approvedList = new List<SelectListItem>();
+                var approvedListNew = new List<SelectListItem>();
+                var statusList = new List<SelectListItem>();
+                var statusListNew = new List<SelectListItem>();
+
+                // The combined SQL query remains the same.
+                var sqlQuery = @"
+            SELECT DISTINCT ProductNo FROM Certificates ORDER BY ProductNo;
+            SELECT DISTINCT ProductNo FROM PartNumbers ORDER BY ProductNo;
+            SELECT DISTINCT Amendment FROM Certificates ORDER BY Amendment;
+            SELECT DISTINCT Amendment FROM Amendments ORDER BY Amendment;
+            SELECT DISTINCT Signatory FROM Certificates ORDER BY Signatory;
+            SELECT DISTINCT State FROM Certificates WHERE State IS NOT NULL AND State <> '' ORDER BY State;
+            SELECT DISTINCT State FROM States ORDER BY State;
+            SELECT DISTINCT Approved FROM Certificates ORDER BY Approved;
+            SELECT DISTINCT ApprovedDesignIndicator FROM ApprovedDesignIndicators ORDER BY ApprovedDesignIndicator;
+            SELECT DISTINCT Status FROM Certificates ORDER BY Status;
+            SELECT DISTINCT Status FROM Statuses ORDER BY Status;
+            SELECT DISTINCT Name FROM Users WHERE Role = @SignatoryRole ORDER BY Name;";
+
+                string connectionString = _configuration.GetConnectionString("SQLConnection");
+
+                try
+                {
+                    await using (var conn = new SqlConnection(connectionString))
                     {
-                        while (reader.Read())
+                        await conn.OpenAsync();
+                        await using (var cmd = new SqlCommand(sqlQuery, conn))
                         {
-                            SignatoryListNew.Add(new SelectListItem { Value = reader["Name"].ToString(), Text = reader["Name"].ToString() });
+                            cmd.Parameters.AddWithValue("@SignatoryRole", 2);
+
+                            await using (var reader = await cmd.ExecuteReaderAsync())
+                            {
+                                await PopulateDropdownListFromReaderAsync(reader, productNoList, "ProductNo");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, productNoListNew, "ProductNo");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, amendmentList, "Amendment");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, amendmentListNew, "Amendment");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, signatoryList, "Signatory");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, stateList, "State");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, stateListNew, "State");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, approvedList, "Approved");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, approvedListNew, "ApprovedDesignIndicator");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, statusList, "Status");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, statusListNew, "Status");
+                                await reader.NextResultAsync();
+                                await PopulateDropdownListFromReaderAsync(reader, signatoryListNew, "Name");
+                            }
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "An error occurred while fetching and caching dropdown data.");
+                    // Return empty lists on failure to prevent caching nulls, which could cause errors.
+                    // The page will still load, just with empty dropdowns.
+                }
+
+                // Return the populated lists in a tuple to be cached.
+                return (
+                    productNoList, productNoListNew, amendmentList, amendmentListNew,
+                    signatoryList, signatoryListNew, stateList, stateListNew,
+                    approvedList, approvedListNew, statusList, statusListNew
+                );
+            });
+
+            // Deconstruct the tuple from the cache (or the fresh DB query)
+            // and assign the lists to the PageModel properties.
+            (
+                ProductNoList, ProductNoListNew, AmendmentList, AmendmentListNew,
+                SignatoryList, SignatoryListNew, StateList, StateListNew,
+                ApprovedList, ApprovedListNew, StatusList, StatusListNew
+            ) = cachedLists;
+        }
+
+
+        /// <summary>
+        /// Populates a List of SelectListItem from the current result set of a SqlDataReader.
+        /// </summary>
+
+        private async Task PopulateDropdownListFromReaderAsync(SqlDataReader reader, List<SelectListItem> list, string columnName)
+        {
+            while (await reader.ReadAsync()) // FIX
+            {
+                var value = reader[columnName]?.ToString();
+                if (!string.IsNullOrEmpty(value))
+                {
+                    list.Add(new SelectListItem { Value = value, Text = value });
                 }
             }
         }

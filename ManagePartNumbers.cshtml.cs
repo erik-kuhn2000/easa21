@@ -3,11 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+
 
 namespace QApp.Pages
 {
@@ -39,75 +35,59 @@ namespace QApp.Pages
         [BindProperty(SupportsGet = true)]
         public string SearchTerm { get; set; }
 
+        [TempData]
         public string SuccessMessage { get; set; }
+        [TempData]
         public string ErrorMessage { get; set; }
 
         private readonly IConfiguration _configuration;
         private readonly ILogger<ManageProductNumbersModel> _logger;
-        private readonly IAuthorizationService _authorizationService;
 
-        public ManageProductNumbersModel(IConfiguration configuration, ILogger<ManageProductNumbersModel> logger, IAuthorizationService authorizationService)
+        public ManageProductNumbersModel(IConfiguration configuration, ILogger<ManageProductNumbersModel> logger)
         {
             _configuration = configuration;
             _logger = logger;
-            _authorizationService = authorizationService;
         }
 
-        public void OnGet()
+        public async Task OnGetAsync()
         {
-            LoadDropdowns();
-            LoadProductNumbers();
+            await LoadPageDataAsync();
         }
 
-
-        public IActionResult OnPost(string handler)
+        public async Task<IActionResult> OnPostAsync(string handler)
         {
-            _logger.LogInformation("OnPost called with handler: {Handler}, SearchTerm before processing: '{SearchTerm}'", handler, SearchTerm);
+            _logger.LogInformation("OnPostAsync called with handler: {Handler}", handler);
 
             if (handler == "add")
             {
-                return OnPostAddProduct();
+                return await OnPostAddProductAsync();
             }
 
             if (handler == "search")
             {
-                PageNumber = 1; // Reset to first page when searching
-                _logger.LogInformation("Search initiated with term: '{SearchTerm}'", SearchTerm);
+                PageNumber = 1;
             }
 
             if (handler == "clear")
             {
-                SearchTerm = string.Empty;
-                PageNumber = 1;
-                _logger.LogInformation("Search cleared - SearchTerm after clear: '{SearchTerm}'", SearchTerm);
-
-                // Redirect to clear the form state completely
-                return RedirectToPage("/ManagePartNumbers");
+                return RedirectToPage();
             }
 
-            LoadDropdowns();
-            LoadProductNumbers();
+            await LoadPageDataAsync();
             return Page();
         }
 
-        public IActionResult OnPostAddProduct()
+        public async Task<IActionResult> OnPostAddProductAsync()
         {
             var errors = new List<string>();
 
-            // Validation
-            if (string.IsNullOrWhiteSpace(NewProduct.ProductNo))
-                errors.Add("Part No. is required.");
-            if (string.IsNullOrWhiteSpace(NewProduct.ProductDesc))
-                errors.Add("Description is required.");
-            if (string.IsNullOrWhiteSpace(NewProduct.Serialization))
-                errors.Add("Serialization is required.");
-            if (string.IsNullOrWhiteSpace(NewProduct.ProductType))
-                errors.Add("Part Type is required.");
-            if (string.IsNullOrWhiteSpace(NewProduct.Manufacturer))
-                errors.Add("Manufacturer is required.");
+            if (string.IsNullOrWhiteSpace(NewProduct.ProductNo)) errors.Add("Part No. is required.");
+            if (string.IsNullOrWhiteSpace(NewProduct.ProductDesc)) errors.Add("Description is required.");
+            if (string.IsNullOrWhiteSpace(NewProduct.Serialization)) errors.Add("Serialization is required.");
+            if (string.IsNullOrWhiteSpace(NewProduct.ProductType)) errors.Add("Part Type is required.");
+            if (string.IsNullOrWhiteSpace(NewProduct.Manufacturer)) errors.Add("Manufacturer is required.");
 
-            // Check if Product Number already exists - ONLY for ADD operations
-            if (!string.IsNullOrWhiteSpace(NewProduct.ProductNo) && ProductNumberExists(NewProduct.ProductNo))
+            if (!string.IsNullOrWhiteSpace(NewProduct.ProductNo) && await ProductNumberExistsAsync(NewProduct.ProductNo))
             {
                 errors.Add("Part No. already exists.");
             }
@@ -115,19 +95,18 @@ namespace QApp.Pages
             if (errors.Any())
             {
                 ErrorMessage = string.Join(" ", errors);
-                LoadDropdowns();
-                LoadProductNumbers();
+                await LoadPageDataAsync();
                 return Page();
             }
 
             try
             {
-                bool success = AddProductNumber(NewProduct);
+                bool success = await AddProductNumberAsync(NewProduct);
                 if (success)
                 {
-                    LogAddAction(NewProduct);
+                    await LogAddActionAsync(NewProduct);
                     SuccessMessage = "Part No. added successfully.";
-                    NewProduct = new ProductNumber(); // Clear form
+                    return RedirectToPage();
                 }
                 else
                 {
@@ -140,13 +119,12 @@ namespace QApp.Pages
                 ErrorMessage = $"Error adding Part Number: {ex.Message}";
             }
 
-            LoadDropdowns();
-            LoadProductNumbers();
+            await LoadPageDataAsync();
             return Page();
         }
 
-        public async Task<IActionResult> OnPostUpdateProduct(
-    string productNo, string productDesc, string serialization, string productType, string manufacturer)
+        public async Task<IActionResult> OnPostUpdateProductAsync(
+            string productNo, string productDesc, string serialization, string productType, string manufacturer)
         {
             try
             {
@@ -161,14 +139,13 @@ namespace QApp.Pages
                     return new JsonResult(new { success = false, message = string.Join(" ", errors) });
                 }
 
-                // Get current product details to compare changes
-                var currentProduct = GetProductDetails(productNo);
+                var currentProduct = await GetProductDetailsAsync(productNo);
                 if (currentProduct == null)
                 {
                     return new JsonResult(new { success = false, message = "Product not found." });
                 }
 
-                var product = new ProductNumber
+                var productToUpdate = new ProductNumber
                 {
                     ProductNo = productNo,
                     ProductDesc = productDesc,
@@ -177,12 +154,11 @@ namespace QApp.Pages
                     Manufacturer = manufacturer
                 };
 
-                var success = UpdateProductNumber(product);
+                var success = await UpdateProductNumberAsync(productToUpdate);
 
                 if (success)
                 {
-                    // Pass both current and new product for change comparison
-                    LogUpdateAction(product, currentProduct);
+                    await LogUpdateActionAsync(productToUpdate, currentProduct);
                     return new JsonResult(new { success = true, message = "Part No. updated successfully." });
                 }
                 else
@@ -197,9 +173,8 @@ namespace QApp.Pages
             }
         }
 
-        public async Task<IActionResult> OnPostDeleteProduct(string productNo)
+        public async Task<IActionResult> OnPostDeleteProductAsync(string productNo)
         {
-            // 1. Add validation for the incoming productNo
             if (string.IsNullOrWhiteSpace(productNo))
             {
                 return new JsonResult(new { success = false, message = "Part Number is required." });
@@ -207,20 +182,17 @@ namespace QApp.Pages
 
             try
             {
-                // 2. First check if the product exists
-                var productToDelete = GetProductDetails(productNo);
+                var productToDelete = await GetProductDetailsAsync(productNo);
                 if (productToDelete == null)
                 {
                     return new JsonResult(new { success = false, message = "Part Number not found." });
                 }
 
-                // 3. Call the delete method
-                var success = DeleteProductNumber(productToDelete);
+                var success = await DeleteProductNumberAsync(productToDelete);
 
                 if (success)
                 {
-                    // 4. Log the action
-                    LogDeleteAction(productToDelete);
+                    await LogDeleteActionAsync(productToDelete);
                     return new JsonResult(new { success = true, message = "Part No. deleted successfully." });
                 }
                 else
@@ -235,7 +207,7 @@ namespace QApp.Pages
             }
         }
 
-        public IActionResult OnGetProductDetails(string productNo)
+        public async Task<IActionResult> OnGetProductDetailsAsync(string productNo)
         {
             if (string.IsNullOrWhiteSpace(productNo))
             {
@@ -244,7 +216,7 @@ namespace QApp.Pages
 
             try
             {
-                var product = GetProductDetails(productNo);
+                var product = await GetProductDetailsAsync(productNo);
                 if (product == null)
                 {
                     return new JsonResult(new { success = false, message = "Part not found." });
@@ -256,6 +228,12 @@ namespace QApp.Pages
             {
                 return new JsonResult(new { success = false, message = $"Database error: {ex.Message}" });
             }
+        }
+
+        private async Task LoadPageDataAsync()
+        {
+            LoadDropdowns();
+            await LoadProductNumbersAsync();
         }
 
         private void LoadDropdowns()
@@ -273,64 +251,52 @@ namespace QApp.Pages
             };
         }
 
-        private void LoadProductNumbers()
+        private async Task LoadProductNumbersAsync()
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
+            ProductNumbers.Clear();
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
+                    await connection.OpenAsync();
 
                     var whereClauses = new List<string>();
-
-                    // Build WHERE clause
                     if (!string.IsNullOrEmpty(SearchTerm))
                     {
                         whereClauses.Add("(ProductNo LIKE @SearchTerm OR ProductDesc LIKE @SearchTerm OR Serialization LIKE @SearchTerm OR ProductType LIKE @SearchTerm OR Manufacturer LIKE @SearchTerm)");
                     }
-
                     string whereClause = whereClauses.Any() ? "WHERE " + string.Join(" AND ", whereClauses) : "";
-                    _logger.LogInformation("Search WHERE clause: {whereClause}", whereClause);
 
-                    // Get total count - CREATE SEPARATE PARAMETERS
                     var countSql = $"SELECT COUNT(*) FROM PartNumbers {whereClause}";
-                    using (SqlCommand countCommand = new SqlCommand(countSql, connection))
+                    using (var countCommand = new SqlCommand(countSql, connection))
                     {
                         if (!string.IsNullOrEmpty(SearchTerm))
                         {
-                            var searchTermWithWildcards = $"%{SearchTerm}%";
-                            countCommand.Parameters.AddWithValue("@SearchTerm", searchTermWithWildcards);
+                            countCommand.Parameters.AddWithValue("@SearchTerm", $"%{SearchTerm}%");
                         }
-
-                        object countResult = countCommand.ExecuteScalar();
+                        object countResult = await countCommand.ExecuteScalarAsync();
                         TotalResults = countResult != null ? Convert.ToInt32(countResult) : 0;
                     }
 
-                    // Get paginated data - CREATE SEPARATE PARAMETERS AGAIN
                     int offset = (PageNumber - 1) * PageSize;
                     var selectSql = $@"SELECT ProductNo, ProductDesc, Serialization, ProductType, Manufacturer 
-                              FROM PartNumbers 
-                              {whereClause}
-                              ORDER BY ProductNo 
-                              OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
-                    _logger.LogInformation("Executing SQL: {selectSql}", selectSql);
+                                       FROM PartNumbers {whereClause}
+                                       ORDER BY ProductNo 
+                                       OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
-                    using (SqlCommand selectCommand = new SqlCommand(selectSql, connection))
+                    using (var selectCommand = new SqlCommand(selectSql, connection))
                     {
-                        // Add search parameter again for select command
                         if (!string.IsNullOrEmpty(SearchTerm))
                         {
-                            var searchTermWithWildcards = $"%{SearchTerm}%";
-                            selectCommand.Parameters.AddWithValue("@SearchTerm", searchTermWithWildcards);
+                            selectCommand.Parameters.AddWithValue("@SearchTerm", $"%{SearchTerm}%");
                         }
-
                         selectCommand.Parameters.AddWithValue("@Offset", offset);
                         selectCommand.Parameters.AddWithValue("@PageSize", PageSize);
 
-                        using (SqlDataReader reader = selectCommand.ExecuteReader())
+                        using (var reader = await selectCommand.ExecuteReaderAsync())
                         {
-                            while (reader.Read())
+                            while (await reader.ReadAsync())
                             {
                                 ProductNumbers.Add(new ProductNumber
                                 {
@@ -352,19 +318,19 @@ namespace QApp.Pages
             }
         }
 
-        private bool ProductNumberExists(string productNo)
+        private async Task<bool> ProductNumberExistsAsync(string productNo)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
+                    await connection.OpenAsync();
                     var sql = "SELECT COUNT(*) FROM PartNumbers WHERE ProductNo = @ProductNo";
-                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    using (var command = new SqlCommand(sql, connection))
                     {
                         command.Parameters.AddWithValue("@ProductNo", productNo);
-                        int count = Convert.ToInt32(command.ExecuteScalar());
+                        int count = Convert.ToInt32(await command.ExecuteScalarAsync());
                         return count > 0;
                     }
                 }
@@ -376,26 +342,25 @@ namespace QApp.Pages
             }
         }
 
-        private bool AddProductNumber(ProductNumber product)
+        private async Task<bool> AddProductNumberAsync(ProductNumber product)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
+                    await connection.OpenAsync();
                     var sql = @"INSERT INTO PartNumbers (ProductNo, ProductDesc, Serialization, ProductType, Manufacturer) 
-                                      VALUES (@ProductNo, @ProductDesc, @Serialization, @ProductType, @Manufacturer)";
+                                VALUES (@ProductNo, @ProductDesc, @Serialization, @ProductType, @Manufacturer)";
 
-                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    using (var command = new SqlCommand(sql, connection))
                     {
-                        command.Parameters.AddWithValue("@ProductNo", product.ProductNo ?? "");
-                        command.Parameters.AddWithValue("@ProductDesc", product.ProductDesc ?? "");
-                        command.Parameters.AddWithValue("@Serialization", product.Serialization ?? "");
-                        command.Parameters.AddWithValue("@ProductType", product.ProductType ?? "");
-                        command.Parameters.AddWithValue("@Manufacturer", product.Manufacturer ?? "");
-
-                        int rowsAffected = command.ExecuteNonQuery();
+                        command.Parameters.AddWithValue("@ProductNo", product.ProductNo);
+                        command.Parameters.AddWithValue("@ProductDesc", product.ProductDesc);
+                        command.Parameters.AddWithValue("@Serialization", product.Serialization);
+                        command.Parameters.AddWithValue("@ProductType", product.ProductType);
+                        command.Parameters.AddWithValue("@Manufacturer", product.Manufacturer);
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
                     }
                 }
@@ -407,30 +372,29 @@ namespace QApp.Pages
             }
         }
 
-        private bool UpdateProductNumber(ProductNumber product)
+        private async Task<bool> UpdateProductNumberAsync(ProductNumber product)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
+                    await connection.OpenAsync();
                     var sql = @"UPDATE PartNumbers SET 
-                                      ProductDesc = @ProductDesc, 
-                                      Serialization = @Serialization, 
-                                      ProductType = @ProductType, 
-                                      Manufacturer = @Manufacturer 
-                                      WHERE ProductNo = @ProductNo";
+                                ProductDesc = @ProductDesc, 
+                                Serialization = @Serialization, 
+                                ProductType = @ProductType, 
+                                Manufacturer = @Manufacturer 
+                                WHERE ProductNo = @ProductNo";
 
-                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    using (var command = new SqlCommand(sql, connection))
                     {
-                        command.Parameters.AddWithValue("@ProductNo", product.ProductNo ?? "");
-                        command.Parameters.AddWithValue("@ProductDesc", product.ProductDesc ?? "");
-                        command.Parameters.AddWithValue("@Serialization", product.Serialization ?? "");
-                        command.Parameters.AddWithValue("@ProductType", product.ProductType ?? "");
-                        command.Parameters.AddWithValue("@Manufacturer", product.Manufacturer ?? "");
-
-                        int rowsAffected = command.ExecuteNonQuery();
+                        command.Parameters.AddWithValue("@ProductNo", product.ProductNo);
+                        command.Parameters.AddWithValue("@ProductDesc", product.ProductDesc);
+                        command.Parameters.AddWithValue("@Serialization", product.Serialization);
+                        command.Parameters.AddWithValue("@ProductType", product.ProductType);
+                        command.Parameters.AddWithValue("@Manufacturer", product.Manufacturer);
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
                     }
                 }
@@ -442,23 +406,19 @@ namespace QApp.Pages
             }
         }
 
-        private bool DeleteProductNumber(ProductNumber product)
+        private async Task<bool> DeleteProductNumberAsync(ProductNumber product)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
+                    await connection.OpenAsync();
                     var sql = "DELETE FROM PartNumbers WHERE ProductNo = @ProductNo";
-                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    using (var command = new SqlCommand(sql, connection))
                     {
-                        command.Parameters.AddWithValue("@ProductNo", product.ProductNo ?? "");
-                        int rowsAffected = command.ExecuteNonQuery();
-
-                        // Log the actual rows affected for debugging
-                        _logger.LogInformation("Delete operation for {ProductNo} affected {RowsAffected} rows", product.ProductNo, rowsAffected);
-
+                        command.Parameters.AddWithValue("@ProductNo", product.ProductNo);
+                        int rowsAffected = await command.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
                     }
                 }
@@ -470,31 +430,29 @@ namespace QApp.Pages
             }
         }
 
-        private ProductNumber GetProductDetails(string productNo)
+        private async Task<ProductNumber> GetProductDetailsAsync(string productNo)
         {
             string connectionString = _configuration.GetConnectionString("SQLConnection");
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                using (var connection = new SqlConnection(connectionString))
                 {
-                    connection.Open();
-                    var sql = @"SELECT ProductNo, ProductDesc, Serialization, ProductType, Manufacturer 
-                                  FROM PartNumbers WHERE ProductNo = @ProductNo";
-
-                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    await connection.OpenAsync();
+                    var sql = "SELECT * FROM PartNumbers WHERE ProductNo = @ProductNo";
+                    using (var command = new SqlCommand(sql, connection))
                     {
                         command.Parameters.AddWithValue("@ProductNo", productNo);
-                        using (SqlDataReader reader = command.ExecuteReader())
+                        using (var reader = await command.ExecuteReaderAsync())
                         {
-                            if (reader.Read())
+                            if (await reader.ReadAsync())
                             {
                                 return new ProductNumber
                                 {
-                                    ProductNo = reader["ProductNo"]?.ToString() ?? "",
-                                    ProductDesc = reader["ProductDesc"]?.ToString() ?? "",
-                                    Serialization = reader["Serialization"]?.ToString() ?? "",
-                                    ProductType = reader["ProductType"]?.ToString() ?? "",
-                                    Manufacturer = reader["Manufacturer"]?.ToString() ?? ""
+                                    ProductNo = reader["ProductNo"].ToString(),
+                                    ProductDesc = reader["ProductDesc"].ToString(),
+                                    Serialization = reader["Serialization"].ToString(),
+                                    ProductType = reader["ProductType"].ToString(),
+                                    Manufacturer = reader["Manufacturer"].ToString()
                                 };
                             }
                         }
@@ -509,27 +467,26 @@ namespace QApp.Pages
             return null;
         }
 
-        private void LogAddAction(ProductNumber product)
+        private async Task LogAddActionAsync(ProductNumber product)
         {
             try
             {
                 string connectionString = _configuration.GetConnectionString("SQLConnection");
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                using (var conn = new SqlConnection(connectionString))
                 {
-                    conn.Open();
+                    await conn.OpenAsync();
                     var logquery = "INSERT INTO Log_PartNumbers (Action, Performed_By, Datetime, ProductNo, ProductDescription, Serialization, PartType, Manufacturer) VALUES (@Action, @ID, @Time, @ProductNo, @ProductDescription,@Serialization, @PartType, @Manufacturer)";
-                    using (SqlCommand cmd = new SqlCommand(logquery, conn))
+                    using (var cmd = new SqlCommand(logquery, conn))
                     {
-
                         cmd.Parameters.AddWithValue("@Action", "Add");
                         cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
-                        cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
-                        cmd.Parameters.AddWithValue("@ProductNo", product.ProductNo ?? (object)DBNull.Value);
-                        cmd.Parameters.AddWithValue("@ProductDescription", product.ProductDesc ?? (object)DBNull.Value);
-                        cmd.Parameters.AddWithValue("@Serialization", product.Serialization ?? (object)DBNull.Value);
-                        cmd.Parameters.AddWithValue("@PartType", product.ProductType ?? (object)DBNull.Value);
-                        cmd.Parameters.AddWithValue("@Manufacturer", product.Manufacturer ?? (object)DBNull.Value);
-                        cmd.ExecuteNonQuery();
+                        cmd.Parameters.AddWithValue("@Time", DateTime.Now);
+                        cmd.Parameters.AddWithValue("@ProductNo", product.ProductNo);
+                        cmd.Parameters.AddWithValue("@ProductDescription", product.ProductDesc);
+                        cmd.Parameters.AddWithValue("@Serialization", product.Serialization);
+                        cmd.Parameters.AddWithValue("@PartType", product.ProductType);
+                        cmd.Parameters.AddWithValue("@Manufacturer", product.Manufacturer);
+                        await cmd.ExecuteNonQueryAsync();
                     }
                 }
             }
@@ -539,75 +496,28 @@ namespace QApp.Pages
             }
         }
 
-        private void LogUpdateAction(ProductNumber newProduct, ProductNumber currentProduct = null)
+        private async Task LogUpdateActionAsync(ProductNumber newProduct, ProductNumber currentProduct)
         {
             try
             {
                 string connectionString = _configuration.GetConnectionString("SQLConnection");
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                using (var conn = new SqlConnection(connectionString))
                 {
-                    conn.Open();
+                    await conn.OpenAsync();
                     var logquery = "INSERT INTO Log_PartNumbers (Action, Performed_By, Datetime, ProductNo, ProductDescription, Serialization, PartType, Manufacturer) VALUES (@Action, @ID, @Time, @ProductNo, @ProductDescription,@Serialization, @PartType, @Manufacturer)";
-                    using (SqlCommand cmd = new SqlCommand(logquery, conn))
+                    using (var cmd = new SqlCommand(logquery, conn))
                     {
                         cmd.Parameters.AddWithValue("@Action", "Update");
                         cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
-                        cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
-                        cmd.Parameters.AddWithValue("@ProductNo", newProduct.ProductNo ?? (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@Time", DateTime.Now);
+                        cmd.Parameters.AddWithValue("@ProductNo", newProduct.ProductNo);
 
-                        // Only log fields that actually changed
-                        if (currentProduct != null)
-                        {
-                            // ProductDescription - only log if changed
-                            if (!string.Equals(currentProduct.ProductDesc?.Trim(), newProduct.ProductDesc?.Trim(), StringComparison.OrdinalIgnoreCase))
-                            {
-                                cmd.Parameters.AddWithValue("@ProductDescription", newProduct.ProductDesc ?? (object)DBNull.Value);
-                            }
-                            else
-                            {
-                                cmd.Parameters.AddWithValue("@ProductDescription", (object)DBNull.Value);
-                            }
+                        cmd.Parameters.AddWithValue("@ProductDescription", currentProduct.ProductDesc != newProduct.ProductDesc ? newProduct.ProductDesc : (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@Serialization", currentProduct.Serialization != newProduct.Serialization ? newProduct.Serialization : (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@PartType", currentProduct.ProductType != newProduct.ProductType ? newProduct.ProductType : (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@Manufacturer", currentProduct.Manufacturer != newProduct.Manufacturer ? newProduct.Manufacturer : (object)DBNull.Value);
 
-                            // Serialization - only log if changed
-                            if (!string.Equals(currentProduct.Serialization?.Trim(), newProduct.Serialization?.Trim(), StringComparison.OrdinalIgnoreCase))
-                            {
-                                cmd.Parameters.AddWithValue("@Serialization", newProduct.Serialization ?? (object)DBNull.Value);
-                            }
-                            else
-                            {
-                                cmd.Parameters.AddWithValue("@Serialization", (object)DBNull.Value);
-                            }
-
-                            // PartType - only log if changed
-                            if (!string.Equals(currentProduct.ProductType?.Trim(), newProduct.ProductType?.Trim(), StringComparison.OrdinalIgnoreCase))
-                            {
-                                cmd.Parameters.AddWithValue("@PartType", newProduct.ProductType ?? (object)DBNull.Value);
-                            }
-                            else
-                            {
-                                cmd.Parameters.AddWithValue("@PartType", (object)DBNull.Value);
-                            }
-
-                            // Manufacturer - only log if changed
-                            if (!string.Equals(currentProduct.Manufacturer?.Trim(), newProduct.Manufacturer?.Trim(), StringComparison.OrdinalIgnoreCase))
-                            {
-                                cmd.Parameters.AddWithValue("@Manufacturer", newProduct.Manufacturer ?? (object)DBNull.Value);
-                            }
-                            else
-                            {
-                                cmd.Parameters.AddWithValue("@Manufacturer", (object)DBNull.Value);
-                            }
-                        }
-                        else
-                        {
-                            // Fallback: if no current product provided, log all fields
-                            cmd.Parameters.AddWithValue("@ProductDescription", newProduct.ProductDesc ?? (object)DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Serialization", newProduct.Serialization ?? (object)DBNull.Value);
-                            cmd.Parameters.AddWithValue("@PartType", newProduct.ProductType ?? (object)DBNull.Value);
-                            cmd.Parameters.AddWithValue("@Manufacturer", newProduct.Manufacturer ?? (object)DBNull.Value);
-                        }
-
-                        cmd.ExecuteNonQuery();
+                        await cmd.ExecuteNonQueryAsync();
                     }
                 }
             }
@@ -617,22 +527,22 @@ namespace QApp.Pages
             }
         }
 
-        private void LogDeleteAction(ProductNumber product)
+        private async Task LogDeleteActionAsync(ProductNumber product)
         {
             try
             {
                 string connectionString = _configuration.GetConnectionString("SQLConnection");
-                using (SqlConnection conn = new SqlConnection(connectionString))
+                using (var conn = new SqlConnection(connectionString))
                 {
-                    conn.Open();
+                    await conn.OpenAsync();
                     var logquery = "INSERT INTO Log_PartNumbers (Action, Performed_By, Datetime, ProductNo) VALUES (@Action, @ID, @Time, @ProductNo)";
-                    using (SqlCommand cmd = new SqlCommand(logquery, conn))
+                    using (var cmd = new SqlCommand(logquery, conn))
                     {
                         cmd.Parameters.AddWithValue("@Action", "Delete");
                         cmd.Parameters.AddWithValue("@ID", User.Identity?.Name ?? (object)DBNull.Value);
-                        cmd.Parameters.AddWithValue("@Time", DateTime.Now.ToString("dd.MMM.yyyy HH:mm:ss"));
-                        cmd.Parameters.AddWithValue("@ProductNo", product.ProductNo ?? (object)DBNull.Value);
-                        cmd.ExecuteNonQuery();
+                        cmd.Parameters.AddWithValue("@Time", DateTime.Now);
+                        cmd.Parameters.AddWithValue("@ProductNo", product.ProductNo);
+                        await cmd.ExecuteNonQueryAsync();
                     }
                 }
             }

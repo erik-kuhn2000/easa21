@@ -63,7 +63,28 @@
                     <tr>
                         <td>@personnel.TGI</td>
                         <td>@personnel.Name</td>
-                        <td>@(personnel.Role == 1 ? "Admin" : (personnel.Role == 2 ? "Signatory" : "Unknown"))</td>
+                        <td>
+                            @{
+                                string badgeClass;
+                                string roleName;
+                                switch (personnel.Role)
+                                {
+                                    case 1:
+                                        badgeClass = "bg-danger";
+                                        roleName = "Admin";
+                                        break;
+                                    case 2:
+                                        badgeClass = "bg-success";
+                                        roleName = "Signatory";
+                                        break;
+                                    default:
+                                        badgeClass = "bg-primary";
+                                        roleName = "Viewer"; // Or "Unknown"
+                                        break;
+                                }
+                                <span class="badge rounded-pill @badgeClass">@roleName</span>
+                            }
+                        </td>
                         <td class="text-center">
                            
                             @if (string.Equals(personnel.TGI, Model.LoggedInUserTGI, StringComparison.OrdinalIgnoreCase))

@@ -19,7 +19,7 @@
             <div class="row g-3">
                 <div class="col-md-4">
                     <label asp-for="NewProduct.ProductNo" class="form-label">Part No. <span class="error-star" style="color: red;">*</span></label>
-                    <input asp-for="NewProduct.ProductNo" class="form-control mandatory @(Html.Raw(ModelState.GetFieldValidationState("NewProduct.ProductNo") == Microsoft.AspNetCore.Mvc.ModelBinding.ModelValidationState.Invalid ? "is-invalid" : ""))" placeholder="Enter Part No." maxlength="40">
+                    <input asp-for="NewProduct.ProductNo" class="form-control mandatory @(Html.Raw(ModelState.GetFieldValidationState("NewProduct.ProductNo") == Microsoft.AspNetCore.Mvc.ModelBinding.ModelValidationState.Invalid ? "is-invalid" : ""))" placeholder="Enter Part No." maxlength="25">
                 </div>
                 <div class="col-md-4">
                     <label asp-for="NewProduct.ProductDesc" class="form-label">Description <span class="error-star" style="color: red;">*</span></label>
@@ -127,7 +127,7 @@
 
     @if (Model.TotalPages > 1)
     {
-        <div class="card-footer">
+       
             <nav aria-label="Product Numbers Pagination">
                 <ul class="pagination justify-content-center mb-0">
                     @if (Model.PageNumber > 1)
@@ -201,7 +201,7 @@
             <div class="text-center text-muted small mt-2">
                 Showing page @Model.PageNumber of @Model.TotalPages (@Model.TotalResults total results)
             </div>
-        </div>
+      
     }
 
 }

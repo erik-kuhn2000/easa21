@@ -4,38 +4,25 @@
     ViewData["Title"] = "Add";
 }
 
-@{
-    var showComment = 0;
-  
-}
-
 <form method="post" id="addForm">
-
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="page-title">Add Certificate</h1>
-        <div>
-        </div>
     </div>
     <p class="subtitle">Add new certificate entrys. Information for Column 1,2,4,5 shall be shown on the Manual Easa Form automatically upon release.</p>
-  
 
     <div class="card mb-4">
         <div class="card-body">
-
             <div class="row mb-3">
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label asp-for="Edition" class="form-label">3. Edition of Form Tracking No.<span class="error-star" style="color: red;">*</span></label>
-                        <input asp-for="Edition" maxlength="2" class="form-control predefined"
-                               placeholder="Enter Edition of Form Tracking Number" value="00"
-                               oninput="this.value = this.value.replace(/[^0-9]/g, '')" id="add_Edition" readonly>
+                        <input asp-for="Edition" maxlength="2" class="form-control predefined" placeholder="Enter Edition of Form Tracking Number" value="00" oninput="this.value = this.value.replace(/[^0-9]/g, '')" id="add_Edition" readonly>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label asp-for="Item" class="form-label">6. Item<span class="error-star" style="color: red;">*</span></label>
-                        <input asp-for="Item" class="form-control predefined" placeholder="Enter Item " value="001"
-                               readonly>
+                        <input asp-for="Item" class="form-control predefined" placeholder="Enter Item " value="001" readonly>
                     </div>
                 </div>
             </div>
@@ -44,7 +31,7 @@
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label asp-for="ProductDescription" class="form-label">7. Description<span class="error-star" style="color: red;">*</span></label>
-                        <input asp-for="ProductDescription" class="form-control predefined" placeholder="Select Part No. to see details" id="add_ProductDescription" maxlength="25">
+                        <input asp-for="ProductDescription" class="form-control predefined" placeholder="Select Part No. to see details" id="add_ProductDescription" readonly>
                     </div>
                 </div>
                 <div class="col-md-6">
@@ -60,96 +47,80 @@
             <div class="row mb-3">
                 <div class="col-md-6">
                     <div class="mb-3">
-                            <label asp-for="Quantity" class="form-label">9. Qty.<span class="error-star" style="color: red;">*</span></label>
-                        <input asp-for="Quantity" maxlength="5" class="form-control mandatory" placeholder="Enter Qty."
-                               value="01" oninput="this.value = this.value.replace(/[^0-9]/g, '')" id="add_Quantity"
-                               onblur="formatQuantity(this)">
+                        <label asp-for="Quantity" class="form-label">9. Qty.<span class="error-star" style="color: red;">*</span></label>
+                        <input asp-for="Quantity" maxlength="5" class="form-control mandatory" placeholder="Enter Qty." value="01" oninput="this.value = this.value.replace(/[^0-9]/g, '')" id="add_Quantity" onblur="formatQuantity(this)">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="mb-3">
-                            <label asp-for="SerialNo" class="form-label">10. Serial No.<span class="error-star" style="color: red;">*</span></label>
-                            <input asp-for="SerialNo" class="form-control mandatory" placeholder="Enter Serial No" id="add_SerialNo" maxlength="25">
+                        <label asp-for="SerialNo" class="form-label">10. Serial No.<span class="error-star" style="color: red;">*</span></label>
+                        <input asp-for="SerialNo" class="form-control mandatory" placeholder="Enter Serial No" id="add_SerialNo" maxlength="25">
                     </div>
                 </div>
             </div>
 
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label asp-for="Status" class="form-label">11. Status/Work<span class="error-star" style="color: red;">*</span></label>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label asp-for="Status" class="form-label">11. Status/Work<span class="error-star" style="color: red;">*</span></label>
                         <select asp-for="Status" id="add_Status" class="form-control mandatory" asp-items="Model.StatusList">
-                                <option value="" selected disabled>-- Select Status/Work --</option>
-                                
-                            </select>
-                        </div>
+                            <option value="" selected disabled>-- Select Status/Work --</option>
+                        </select>
                     </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            
-
-                        </div>
-                    </div>
+                </div>
             </div>
-                    
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label asp-for="Remarks1" class="form-label">12. Remarks (Line 1)</label>
-                                <textarea asp-for="Remarks1" class="form-control" placeholder="Enter Remarks (Line 1)" maxlength="100" rows="2"></textarea>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label asp-for="Remarks2" class="form-label">12. Remarks (Line 2)</label>
-                                <textarea asp-for="Remarks2" class="form-control" placeholder="Enter Remarks (Line 2)" maxlength="100" rows="2"></textarea>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label asp-for="Remarks3" class="form-label">12. Remarks (Line 3)</label>
-                                <textarea asp-for="Remarks3" class="form-control" placeholder="Enter Remarks 3 (Line 3)" maxlength="100" rows="2"></textarea>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label asp-for="Remarks4" class="form-label">12. Remarks (Line 4)</label>
-                                <textarea asp-for="Remarks4" class="form-control" placeholder="Enter Remarks 4 (Line 4)" maxlength="100" rows="2"></textarea>
-                            </div>
-                        </div>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label asp-for="Remarks1" class="form-label">12. Remarks (Line 1)</label>
+                        <textarea asp-for="Remarks1" class="form-control" placeholder="Enter Remarks (Line 1)" maxlength="150" rows="2"></textarea>
                     </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label asp-for="Remarks2" class="form-label">12. Remarks (Line 2)</label>
+                        <textarea asp-for="Remarks2" class="form-control" placeholder="Enter Remarks (Line 2)" maxlength="150" rows="2"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label asp-for="Remarks3" class="form-label">12. Remarks (Line 3)</label>
+                        <textarea asp-for="Remarks3" class="form-control" placeholder="Enter Remarks 3 (Line 3)" maxlength="150" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label asp-for="Remarks4" class="form-label">12. Remarks (Line 4)</label>
+                        <textarea asp-for="Remarks4" class="form-control" placeholder="Enter Remarks 4 (Line 4)" maxlength="150" rows="2"></textarea>
+                    </div>
+                </div>
+            </div>
 
             <div class="row mb-3">
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label asp-for="Amendment" class="form-label">12. Remarks (Amendment) <span class="error-star" style="color: red;">*</span></label>
-                        <select asp-for="Amendment" class="form-control mandatory" asp-items="Model.AmendmentList" id="add_Amendment" title="-- Select Remarks (Amendment) --"
-                                multiple>
+                        <select asp-for="Amendment" class="form-control mandatory" asp-items="Model.AmendmentList" id="add_Amendment" title="-- Select Remarks (Amendment) --" multiple>
                         </select>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="mb-5">
-                    
-                            <label asp-for="Approved" class="form-label">13a. Approved Design Indicator<span class="error-star" style="color: red;">*</span></label>
+                        <label asp-for="Approved" class="form-label">13a. Approved Design Indicator<span class="error-star" style="color: red;">*</span></label>
                         <select asp-for="Approved" id="add_Approved" class="form-control mandatory" asp-items="Model.ApprovedList">
                             <option value="">-- Select Approved Design Indicator --</option>
-                            
-                            </select>
-                        </div>
+                        </select>
+                    </div>
                     <div class="mb-3">
                         <label asp-for="Authorisation" class="form-label">13c. Approval/Authorisation Number<span class="error-star" style="color: red;">*</span></label>
-                        <input asp-for="Authorisation" class="form-control predefined" placeholder="Enter Approval/Authorisation Number"
-                               readonly>
-
-                    </div>
-
+                        <input asp-for="Authorisation" class="form-control predefined" placeholder="Enter Approval/Authorisation Number" readonly>
                     </div>
                 </div>
-           
+            </div>
 
             <div class="row mb-3">
                 <div class="col-md-6">
@@ -160,10 +131,8 @@
                 </div>
                 <div class="col-md-6">
                     <div class="mb-3">
-
                         <label asp-for="Date" class="form-label">13e. Approval Date<span class="error-star" style="color: red;">*</span></label>
                         <input asp-for="Date" type="text" class="form-control predefined" value="@DateTime.Today.ToString("dd MMM yyyy")" id="add_Date" readonly>
-
                     </div>
                 </div>
             </div>
@@ -175,12 +144,14 @@
                     <div class="mb-3">
                         <label asp-for="State" class="form-label">State<span class="error-star" style="color: red;">*</span></label>
                         <input asp-for="State" type="text" class="form-control predefined" value="Valid" id="add_State" readonly>
-                            
-                       
                     </div>
                 </div>
-                
                 <div class="col-md-6">
+                    @{
+                        // This section appears to be a placeholder for a future feature.
+                        // It is currently hidden because the condition is false.
+                        var showComment = 0;
+                    }
                     @if (showComment == 1)
                     {
                         <div class="mb-3">
@@ -190,20 +161,10 @@
                     }
                 </div>
             </div>
-                    
-                   
-
-                     
-
-
-
-
-           
 
             <small><span class="error-star" style="color: red;">*</span> Field is mandatory</small>
-         
 
-            <div class="row">
+            <div class="row mt-3">
                 <div class="col-12 text-end">
                     <button type="button" class="btn btn-primary" onclick="validateAddForm()"><i class="fas fa-check btn-icon me-2"></i>Submit</button>
                 </div>
@@ -220,7 +181,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <strong>Your about to create a new certificate database entry.</strong><br />
+                    <strong>You are about to create a new certificate database entry.</strong><br />
                     Once added, it cannot be removed, though updates are possible.
                 </div>
                 <div class="modal-footer">
@@ -236,47 +197,35 @@
 
 @section Scripts {
     <script>
+        // --- [IMPROVEMENT] Encapsulated Helper Functions ---
 
+        /**
+         * Displays a dismissible alert message at the bottom of the screen.
+         */
+        function showAlert(message, type = 'danger') {
+            const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle';
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alert.style.cssText = 'bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px; text-align: left;';
+            // Using template literals for cleaner HTML string construction
+            alert.innerHTML = `<i class="fas ${icon} me-2"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
+            document.body.appendChild(alert);
+            // Use modern .remove() method for cleanup
+            setTimeout(() => alert.remove(), 8000);
+        }
+
+        /**
+         * Formats the quantity input to have a leading zero if it's a single digit.
+         */
         function formatQuantity(input) {
             let value = input.value.trim();
-            if (value === '') return; // Do nothing if empty
-
+            if (value === '') return;
             const num = parseInt(value, 10);
-
-            // Check if it's a valid number within a reasonable range
-            if (!isNaN(num) && num > 0) {
-                // Use padStart(2, '0') which pads a string to a target length.
-                // '6'.padStart(2, '0') -> '06'
-                // '10'.padStart(2, '0') -> '10'
-                input.value = num.toString().padStart(2, '0');
-            } else {
-                // If user enters 0 or invalid text, reset to a default
-                input.value = '01';
-            }
+            // Default to '01' if input is invalid or zero
+            input.value = (!isNaN(num) && num > 0) ? num.toString().padStart(2, '0') : '01';
         }
 
-        function showErrorMessage(message) {
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
-            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
-            alert.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
-            document.body.appendChild(alert);
-            setTimeout(() => { if (alert.parentNode) { alert.parentNode.removeChild(alert); } }, 8000);
-        }
-
-        function showSuccessMessage(message) {
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
-            alert.style.cssText = 'bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px;';
-            alert.innerHTML = `<i class="fas fa-check-circle"></i> ${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
-            document.body.appendChild(alert);
-            setTimeout(() => { if (alert.parentNode) { alert.parentNode.removeChild(alert); } }, 8000);
-        }
-
-        function clearAddFormErrors() {
-            document.querySelectorAll('#addForm .mandatory').forEach(f => f.classList.remove('is-invalid'));
-        }
-
+        /** Resets the serial number field to its default editable state. */
         function resetSerialNoField() {
             const serialNoInput = document.getElementById('add_SerialNo');
             if (serialNoInput) {
@@ -287,9 +236,34 @@
             }
         }
 
+        /** Resets the entire form to its initial state after a successful submission. */
+        function resetAddForm() {
+            const form = document.getElementById('addForm');
+            if (!form) return;
+            form.reset();
+
+            // Restore default values for fields not handled by form.reset()
+            document.getElementById('add_Edition').value = "00";
+            document.getElementById('add_Item').value = "001";
+            document.getElementById('add_Quantity').value = "01";
+            document.getElementById('add_State').value = "Valid";
+            document.getElementById('add_Date').value = "@DateTime.Today.ToString("dd MMM yyyy")";
+
+            // Explicitly clear multi-select dropdown and reset Serial No field
+            const amendmentSelect = document.getElementById('add_Amendment');
+            if (amendmentSelect) {
+                Array.from(amendmentSelect.options).forEach(option => option.selected = false);
+            }
+            resetSerialNoField();
+
+            // Clear any validation error styles
+            document.querySelectorAll('#addForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        }
+
+        /** Validates mandatory fields and displays errors or triggers the confirmation modal. */
         function validateAddForm() {
-            clearAddFormErrors();
-            // Comprehensive list of mandatory fields based on UI stars
+            document.querySelectorAll('#addForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
+
             const mandatoryFields = [
                 { id: 'add_Edition', name: 'Edition of Form Tracking Number' },
                 { id: 'add_ProductNo', name: 'Part No.' },
@@ -297,227 +271,120 @@
                 { id: 'add_SerialNo', name: 'Serial No.' },
                 { id: 'add_Status', name: 'Status/Work' },
                 { id: 'add_Amendment', name: 'Remarks (Amendment)' },
-                { id: 'add_Approved', name: 'Approved Design Indicator' },
-                { id: 'add_Authorisation', name: 'Approval/Authorisation Number' },
-                { id: 'add_Signatory', name: 'Name of Signatory' },
-                { id: 'add_Date', name: 'Approval Date' },
-                { id: 'add_State', name: 'State' }
+                { id: 'add_Approved', name: 'Approved Design Indicator' }
             ];
 
-            let isValid = true;
-            let errorMessages = [];
-
+            const errorMessages = [];
             mandatoryFields.forEach(field => {
                 const el = document.getElementById(field.id);
-                if (!el) return; // Skip if element doesn't exist
+                if (!el) return;
 
-                let isFieldInvalid = false;
-                if (el.multiple) { // For multi-select like Amendment
-                    if (el.selectedOptions.length === 0) {
-                        isFieldInvalid = true;
-                    }
-                } else if (!el.value.trim()) { // For other input/select fields
-                    isFieldInvalid = true;
-                }
+                // [IMPROVEMENT] Using a concise ternary operator for the check
+                const isInvalid = el.multiple ? (el.selectedOptions.length === 0) : (!el.value.trim());
 
-                if (isFieldInvalid) {
-                    isValid = false;
+                if (isInvalid) {
                     errorMessages.push(`${field.name} is required.`);
                     el.classList.add('is-invalid');
                 }
             });
 
-            if (!isValid) {
-                if (errorMessages.length > 0) {
-                    showErrorMessage('Validation Error:<br>' + errorMessages.join('<br>'));
-                }
+            if (errorMessages.length > 0) {
+                showAlert(`Validation Error:<br>${errorMessages.join('<br>')}`);
                 return;
             }
 
-            // If validation passes, show confirmation modal
-            new bootstrap.Modal(document.getElementById('confirmAddModal')).show();
+            // If validation passes, show the confirmation modal
+            const confirmModal = new bootstrap.Modal(document.getElementById('confirmAddModal'));
+            confirmModal.show();
             document.getElementById('confirmAddBtn').onclick = () => document.getElementById('addForm').submit();
         }
 
+
+        // --- [IMPROVEMENT] Main script execution after DOM is loaded ---
         document.addEventListener("DOMContentLoaded", function () {
-            // Cache form elements for reuse
-            const form = document.getElementById('addForm');
-            const productNoSelect = document.getElementById('add_ProductNo');
-            const serialNoInput = document.getElementById('add_SerialNo');
-            const statusSelect = document.getElementById('add_Status');
-            const approvedSelect = document.getElementById('add_Approved');
-            const signatorySelect = document.getElementById('add_Signatory');
-            const authorisationInput = document.getElementById('add_Authorisation');
-            const amendmentSelect = document.getElementById('add_Amendment');
 
-        // --- [NEW] Event Listener for Amendment Dropdown (Advanced Selection Logic) ---
-             if (amendmentSelect) {
-                 // This variable will hold the list of selected indexes before a change occurs.
-                 let previousSelection = [];
+            // --- [IMPROVEMENT] Securely pass data from Razor to JavaScript ---
+            // Using Json.Serialize is safer than Html.Raw as it correctly handles special characters.
+            const isSuccess = @Json.Serialize(Model.IsSuccess);
+            const successMessage = @Json.Serialize(Model.SuccessMessage);
 
-                 // We use 'mousedown' to capture the state *before* the 'change' event fires.
-                 amendmentSelect.addEventListener('mousedown', function () {
-                     previousSelection = Array.from(this.selectedOptions).map(opt => opt.index);
-                 });
-
-                 // The 'change' event fires *after* the user has made their selection.
-                 amendmentSelect.addEventListener('change', function () {
-                     const currentSelection = Array.from(this.selectedOptions).map(opt => opt.index);
-
-                     // Find which items, if any, were newly added to the selection.
-                     const addedItems = currentSelection.filter(index => !previousSelection.includes(index));
-
-                     // REQUIREMENT 2: If no new items were added, it was a DESELECTION.
-                     // We do nothing and let the user's deselection stand.
-                     if (addedItems.length === 0) {
-                         return;
-                     }
-
-                     // An item was SELECTED. Find the highest index among the newly added items.
-                     const maxNewIndex = Math.max(...addedItems);
-
-                     // REQUIREMENT 1: If the user selected the first item (index 0),
-                     // we also do nothing further, respecting it as a single selection.
-                     if (maxNewIndex === 0) {
-                         return;
-                     }
-
-                     // Apply the cascading logic: select all items from the second option (index 1)
-                     // up to the highest newly selected item. This will not affect other selections.
-                     for (let i = 1; i <= maxNewIndex; i++) {
-                         this.options[i].selected = true;
-                     }
-                 });
-             }
-
-         
+            if (isSuccess && successMessage) {
+                showAlert(successMessage, 'success');
+                resetAddForm();
+            }
 
             // --- Event Listener for Part No. Change ---
-                   // Fixed JavaScript for handling Product No. change
-        if (productNoSelect) {
-            productNoSelect.addEventListener('change', function () {
-                const productNo = this.value;
+            const productNoSelect = document.getElementById('add_ProductNo');
+            if (productNoSelect) {
+                productNoSelect.addEventListener('change', function () {
+                    const productNo = this.value;
+                    const productDescInput = document.getElementById('add_ProductDescription');
+                    const serialNoInput = document.getElementById('add_SerialNo');
 
-                if (productNo) {
-                    // Updated URL to match ASP.NET Core Razor Pages conventions
+                    if (!productNo) {
+                        if(productDescInput) productDescInput.value = '';
+                        resetSerialNoField();
+                        return;
+                    }
+
                     const url = `?handler=ProductDetails&productNo=${encodeURIComponent(productNo)}`;
-
-                    fetch(url, {
-                        method: 'GET',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json'
-                        }
-                    })
-                    .then(response => {
-                        console.log('Response status:', response.status); // Debug logging
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        console.log('Received data:', data); // Debug logging
-
-                        // Check if there's an error in the response
-                        if (data.error) {
-                            throw new Error(data.message || 'Unknown error occurred');
-                        }
-
-                        // Only set product description - no more status or approved design indicator
-                        const productDescInput = document.getElementById('add_ProductDescription');
-                        if (productDescInput) {
-                            productDescInput.value = data.productDescription || '';
-                        }
-
-                        // Handle serialization logic for Serial No. field
-                        const isSerialized = (data.serialization || '').trim().toLowerCase() === 'yes';
-                        if (isSerialized) {
-                            resetSerialNoField();
-                        } else {
-                            if (serialNoInput) {
+                    fetch(url)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`Server responded with status: ${response.status}`);
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            if (data.error) {
+                                throw new Error(data.message || 'An unknown error occurred while fetching details.');
+                            }
+                            if (productDescInput) {
+                                productDescInput.value = data.productDescription || '';
+                            }
+                            const isSerialized = (data.serialization || '').trim().toLowerCase() === 'yes';
+                            if (isSerialized) {
+                                resetSerialNoField();
+                            } else if(serialNoInput) {
                                 serialNoInput.readOnly = true;
                                 serialNoInput.value = 'N/A';
                                 serialNoInput.placeholder = '';
                                 serialNoInput.classList.add('bg-light');
                             }
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching part details:', error);
-                        showErrorMessage('Could not load part details: ' + error.message);
+                        })
+                        .catch(error => {
+                            console.error('Error fetching part details:', error);
+                            showAlert(error.message, 'danger');
+                            if(productDescInput) productDescInput.value = '';
+                            resetSerialNoField();
+                        });
+                });
+            }
 
-                        // Reset related fields on error
-                        const productDescInput = document.getElementById('add_ProductDescription');
-                        if (productDescInput) productDescInput.value = '';
-                        resetSerialNoField();
-                    });
-                } else {
-                    // Reset fields if no Part No. is selected
-                    const productDescInput = document.getElementById('add_ProductDescription');
-                    if (productDescInput) productDescInput.value = '';
-                    resetSerialNoField();
-                }
-            });
-        }
+            // --- Event Listener for Amendment Dropdown (Logic is unchanged, kept for functionality) ---
+            const amendmentSelect = document.getElementById('add_Amendment');
+            if (amendmentSelect) {
+                let previousSelection = [];
+                amendmentSelect.addEventListener('mousedown', function () {
+                    previousSelection = Array.from(this.selectedOptions).map(opt => opt.index);
+                });
+                amendmentSelect.addEventListener('change', function () {
+                    const currentSelection = Array.from(this.selectedOptions).map(opt => opt.index);
+                    const addedItems = currentSelection.filter(index => !previousSelection.includes(index));
+                    if (addedItems.length === 0) return; // A deselection occurred
 
-            // --- Event Listener for Signatory Change (to fetch Authorisation Number) ---
-            if (signatorySelect) {
-                signatorySelect.addEventListener('change', function () {
-                    const signatoryName = this.value;
-                    authorisationInput.value = ''; // Clear previous value
+                    const maxNewIndex = Math.max(...addedItems);
+                    if (maxNewIndex === 0) return; // First item was selected alone
 
-                    if (signatoryName) {
-                        // Assumes a backend handler named 'SignatoryDetails' exists
-                        const url = `/Add?handler=SignatoryDetails&signatoryName=${encodeURIComponent(signatoryName)}`;
-                        fetch(url)
-                            .then(response => {
-                                if (!response.ok) throw new Error('Network response error');
-                                return response.json();
-                            })
-                            .then(data => {
-                                // Assumes JSON response is { authorisationNumber: '...' }
-                                if (data && data.authorisationNumber) {
-                                    authorisationInput.value = data.authorisationNumber;
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Error fetching signatory details:', error);
-                                showErrorMessage('Could not load authorisation number.');
-                            });
+                    // Cascade selection from the second item up to the highest selected one
+                    for (let i = 1; i <= maxNewIndex; i++) {
+                        this.options[i].selected = true;
                     }
                 });
             }
 
-            // --- Success Message & Form Reset Handling ---
-            var isSuccess = @Json.Serialize(Model.IsSuccess);
-            var successMessage = "@Html.Raw(Model.SuccessMessage?.Replace("\"", "\\\"") ?? "")";
-
-            if (isSuccess === true && successMessage && successMessage.trim() !== "") {
-                showSuccessMessage(successMessage);
-                if (form) {
-                    form.reset();
-
-                    // Restore default/initial values for fields not handled correctly by form.reset()
-                    document.getElementById('add_Edition').value = "00";
-                    document.getElementById('add_Quantity').value = "01";
-                    document.getElementById('add_Date').value = "@DateTime.Today.ToString("dd MMM yyyy")";
-
-                    // Explicitly clear multi-select dropdown
-                    const amendmentSelect = document.getElementById('add_Amendment');
-                    if (amendmentSelect) {
-                        Array.from(amendmentSelect.options).forEach(option => option.selected = false);
-                    }
-
-                    resetSerialNoField(); // Ensure Serial No field is in its default state
-                }
-            }
+            // The Signatory change event listener from the original code was removed
+            // because the Signatory and Authorisation fields are now readonly and pre-filled by the server.
         });
-
-             
-
-          
-       
     </script>
-
 }
